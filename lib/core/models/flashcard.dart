@@ -10,4 +10,18 @@ class Flashcard {
     required this.back,
     required this.createdAt,
   });
+
+  Flashcard copyWith({
+    String? id,
+    String? front,
+    String? back,
+    DateTime? createdAt,
+  }) {
+    return Flashcard(
+      id: id ?? this.id,
+      front: front ?? this.front,
+      back: back ?? this.back,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
 }
