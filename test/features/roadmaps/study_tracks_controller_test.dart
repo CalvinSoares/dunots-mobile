@@ -9,6 +9,11 @@ class FailingStudyTrackRepository implements StudyTrackRepository {
   Future<List<StudyTrack>> getAll() {
     throw StateError('Falha simulada');
   }
+
+  @override
+  Future<void> create(StudyTrack track) {
+    throw StateError('Falha simulada');
+  }
 }
 
 void main() {
@@ -51,6 +56,41 @@ void main() {
 
     expect(controller.state.status, StudyTracksStatus.error);
     expect(controller.state.errorMessage, isNotNull);
+
+    controller.dispose();
+  });
+
+  test('cria uma trilha e atualiza a lista', () async {
+    final controller = StudyTracksController(
+      repository: InMemoryStudyTrackRepository(tracks: const []),
+    );
+
+    await controller.load();
+    await controller.createTrack(
+      title: 'Redes de Computadores',
+      description: 'Trilha de fundamentos de redes.',
+    );
+
+    expect(controller.state.status, StudyTracksStatus.data);
+    expect(controller.state.tracks, hasLength(1));
+    expect(controller.state.tracks.single.title, 'Redes de Computadores');
+    expect(
+      controller.state.tracks.single.description,
+      'Trilha de fundamentos de redes.',
+    );
+
+    controller.dispose();
+  });
+
+  test('não cria uma trilha sem título', () async {
+    final controller = StudyTracksController(
+      repository: InMemoryStudyTrackRepository(tracks: const []),
+    );
+
+    expect(
+      () => controller.createTrack(title: '  ', description: ''),
+      throwsArgumentError,
+    );
 
     controller.dispose();
   });
