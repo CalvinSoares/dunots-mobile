@@ -12,6 +12,7 @@ import '../quizzes/quiz_attempt_page.dart';
 import '../roadmaps/data/study_track_repository.dart';
 import '../roadmaps/domain/study_track.dart';
 import '../../shared/widgets/study_widgets.dart';
+import '../../core/notifications/local_notification_service.dart';
 
 class TodayPage extends StatefulWidget {
   final FlashcardRepository? flashcardRepository;
@@ -23,6 +24,7 @@ class TodayPage extends StatefulWidget {
   final QuizAttemptRepository? attemptRepository;
   final VoidCallback? onOpenFlashcards;
   final VoidCallback? onOpenQuestions;
+  final LocalNotificationService? localNotificationService;
 
   const TodayPage({
     super.key,
@@ -34,6 +36,7 @@ class TodayPage extends StatefulWidget {
     this.attemptRepository,
     this.onOpenFlashcards,
     this.onOpenQuestions,
+    this.localNotificationService,
   });
 
   @override
@@ -42,10 +45,13 @@ class TodayPage extends StatefulWidget {
 
 class _TodayPageState extends State<TodayPage> {
   late Future<_TodayData> _dataFuture;
+  late final LocalNotificationService _notificationService;
 
   @override
   void initState() {
     super.initState();
+    _notificationService =
+        widget.localNotificationService ?? const NoopLocalNotificationService();
     _dataFuture = _loadData();
   }
 
@@ -76,6 +82,11 @@ class _TodayPageState extends State<TodayPage> {
       0,
       (total, session) => total + session.cardCount,
     );
+    await _notificationService.syncDailyFlashcardReminder(
+      preferences: preferences,
+      completedToday: completedToday,
+      dueCount: dueCount,
+    );
     return _TodayData(
       cards: cards,
       tracks: tracks,
@@ -97,7 +108,9 @@ class _TodayPageState extends State<TodayPage> {
         if (snapshot.hasError) {
           return StudyErrorState(
             message: 'Não foi possível carregar o mural.',
-            onRetry: () => setState(() => _dataFuture = _loadData()),
+            onRetry: () => setState(() {
+              _dataFuture = _loadData();
+            }),
           );
         }
         final data = snapshot.data;
@@ -343,7 +356,14 @@ class _TodayPageState extends State<TodayPage> {
     final repository = widget.flashcardReviewPreferencesRepository;
     if (repository == null) return;
     await repository.save(updated);
-    if (mounted) setState(() => _dataFuture = _loadData());
+    if (updated.reminderEnabled) {
+      await _notificationService.requestPermission();
+    }
+    if (mounted) {
+      setState(() {
+        _dataFuture = _loadData();
+      });
+    }
   }
 
   String _formatTime(int hour, int minute) {
@@ -367,7 +387,9 @@ class _TodayPageState extends State<TodayPage> {
       ),
     );
     if (mounted) {
-      setState(() => _dataFuture = _loadData());
+      setState(() {
+        _dataFuture = _loadData();
+      });
     }
   }
 }
