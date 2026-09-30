@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:dunots_mobile/core/models/flashcard.dart';
 
 import '../../shared/widgets/study_widgets.dart';
+import 'flashcard_details_page.dart';
 
 class FlashcardListItem extends StatelessWidget {
   final Flashcard card;
@@ -11,6 +12,14 @@ class FlashcardListItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ExampleListTile(title: card.front, detail: card.back);
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () {
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => FlashcardDetailsPage(card: card)),
+        );
+      },
+      child: ExampleListTile(title: card.front, detail: card.back),
+    );
   }
 }
