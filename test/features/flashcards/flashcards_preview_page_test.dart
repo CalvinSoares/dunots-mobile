@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:dunots_mobile/core/models/flashcard.dart';
+import 'package:dunots_mobile/features/flashcards/data/flashcard_review_preferences_repository.dart';
 import 'package:dunots_mobile/features/flashcards/data/flashcard_repository.dart';
 import 'package:dunots_mobile/features/flashcards/flashcards_preview_page.dart';
 
@@ -59,7 +60,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Todos os cards (4)'), findsOneWidget);
+    expect(find.text('Todos (4)'), findsOneWidget);
     expect(find.text('Vencidos (3)'), findsOneWidget);
     expect(find.text('Novos (1)'), findsOneWidget);
     expect(find.text('Difíceis (1)'), findsOneWidget);
@@ -76,9 +77,8 @@ void main() {
     await tester.tap(recommendedButton);
     await tester.pumpAndSettle();
     expect(find.text('Montar revisão recomendada'), findsOneWidget);
-    expect(find.text('4 cards disponíveis · 1 classificados como difíceis.'),
-        findsOneWidget);
-    expect(find.text('Todos (4)'), findsOneWidget);
+    expect(find.textContaining('3 cards disponíveis'), findsOneWidget);
+    expect(find.text('Todos os cards (3)'), findsOneWidget);
     await tester.tap(find.text('Cancelar'));
     await tester.pumpAndSettle();
 
@@ -110,5 +110,46 @@ void main() {
     expect(find.text('Card vencido'), findsOneWidget);
     expect(find.text('Card futuro'), findsOneWidget);
     expect(find.text('Card novo'), findsNothing);
+  });
+
+  testWidgets('salva as preferências alteradas na tela', (tester) async {
+    final preferencesRepository =
+        InMemoryFlashcardReviewPreferencesRepository();
+    final now = DateTime.now();
+    final repository = InMemoryFlashcardRepository(
+      cards: [
+        Flashcard(
+          id: 'card',
+          front: 'Card',
+          back: 'Resposta',
+          createdAt: now,
+          dueAt: now,
+          reviewCount: 1,
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: FlashcardsPreviewPage(
+            repository: repository,
+            preferencesRepository: preferencesRepository,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(DropdownButtonFormField<int>).last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Até 10 cards').last);
+    await tester.pump();
+    await tester.tap(find.byType(SwitchListTile));
+    await tester.pump();
+
+    final saved = await preferencesRepository.get();
+    expect(saved.dailyLimit, 10);
+    expect(saved.preferRecommended, isTrue);
   });
 }

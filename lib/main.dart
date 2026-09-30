@@ -2,6 +2,7 @@ import 'core/database/app_database.dart';
 
 import 'package:dunots_mobile/app/dunots_app.dart';
 import 'package:dunots_mobile/features/flashcards/data/sqlite_flashcard_repository.dart';
+import 'package:dunots_mobile/features/flashcards/data/sqlite_flashcard_review_preferences_repository.dart';
 import 'package:dunots_mobile/features/flashcards/data/sqlite_flashcard_session_repository.dart';
 import 'package:dunots_mobile/features/flashcards/flashcard_demo_data.dart';
 import 'package:dunots_mobile/features/roadmaps/data/sqlite_study_node_repository.dart';
@@ -31,6 +32,8 @@ Future<void> main() async {
   }
   final attemptRepository = SqliteQuizAttemptRepository(database);
   final sessionRepository = SqliteFlashcardSessionRepository(database);
+  final reviewPreferencesRepository =
+      SqliteFlashcardReviewPreferencesRepository(database);
 
   runApp(
     DunotsMobileApp(
@@ -39,6 +42,7 @@ Future<void> main() async {
       materialLinkRepository: SqliteStudyNodeMaterialRepository(database),
       flashcardRepository: flashcardRepository,
       flashcardSessionRepository: sessionRepository,
+      flashcardReviewPreferencesRepository: reviewPreferencesRepository,
       questionRepository: questionRepository,
       attemptRepository: attemptRepository,
     ),

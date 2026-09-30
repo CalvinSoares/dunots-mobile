@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../features/flashcards/data/flashcard_repository.dart';
+import '../features/flashcards/data/flashcard_review_preferences_repository.dart';
 import '../features/flashcards/data/flashcard_session_repository.dart';
 import '../features/questions/data/question_repository.dart';
 import '../features/quizzes/data/quiz_attempt_repository.dart';
@@ -16,6 +17,8 @@ class DunotsMobileApp extends StatelessWidget {
   final StudyNodeMaterialRepository? materialLinkRepository;
   final FlashcardRepository? flashcardRepository;
   final FlashcardSessionRepository? flashcardSessionRepository;
+  final FlashcardReviewPreferencesRepository?
+  flashcardReviewPreferencesRepository;
   final QuestionRepository? questionRepository;
   final QuizAttemptRepository? attemptRepository;
 
@@ -26,6 +29,7 @@ class DunotsMobileApp extends StatelessWidget {
     this.materialLinkRepository,
     this.flashcardRepository,
     this.flashcardSessionRepository,
+    this.flashcardReviewPreferencesRepository,
     this.questionRepository,
     this.attemptRepository,
   });
@@ -42,6 +46,8 @@ class DunotsMobileApp extends StatelessWidget {
         materialLinkRepository: materialLinkRepository,
         flashcardRepository: flashcardRepository,
         flashcardSessionRepository: flashcardSessionRepository,
+        flashcardReviewPreferencesRepository:
+            flashcardReviewPreferencesRepository,
         questionRepository: questionRepository,
         attemptRepository: attemptRepository,
       ),
