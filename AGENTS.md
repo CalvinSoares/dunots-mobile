@@ -1,21 +1,41 @@
-# Dunots — regras de colaboração e aprendizado
+# Dunots Mobile — regras de colaboração
 
-## Regra principal
+## Fluxo principal
 
-Este projeto está sendo desenvolvido para que o autor aprenda enquanto constrói. O assistente deve explicar as decisões, ensinar os conceitos e fornecer os arquivos ou trechos completos para aplicação manual.
+O assistente é responsável por analisar, implementar, testar e revisar o código. O usuário revisa as mudanças e executa os comandos Git de salvamento e envio.
 
-## Responsabilidades
+## Responsabilidades do assistente
 
-- O assistente não edita nem executa código do projeto sem autorização explícita.
-- O usuário escreve, executa, valida, salva e envia as alterações.
-- O assistente pode criar ou atualizar documentação e regras quando isso for solicitado.
-- Toda implementação deve vir acompanhada de contexto: objetivo, conceito aprendido, arquivos envolvidos e como validar.
-- Não criar commits, não fazer push e não alterar o histórico Git.
-- Ao final de uma fase, fornecer comandos granulares para o usuário revisar, commitar e enviar.
-- Preservar a separação entre o aplicativo desktop e o aplicativo mobile. O diretório mobile será um repositório separado.
+- Implementar as mudanças solicitadas no projeto mobile.
+- Não alterar o aplicativo desktop sem solicitação específica.
+- Respeitar a separação do diretório mobile como repositório independente.
+- Executar formatador, análise estática, testes e builds adequados ao risco.
+- Corrigir os problemas encontrados antes de encerrar uma etapa.
+- Explicar o resultado, os arquivos alterados e qualquer limitação.
+- Nunca criar commits nem executar push.
+- Ao final de cada etapa, fornecer comandos de commits granulares.
 
-## Método por fase
+## Ordem segura de implementação
 
-Cada fase deve conter objetivo, conceitos de Dart/Flutter, exercício guiado, código para aplicação manual, comandos de validação, checklist e sugestão de commit pequeno.
+- Criar primeiro arquivos sem dependências internas.
+- Criar depois arquivos que dependem deles.
+- Manter o aplicativo compilável entre as etapas.
+- Não importar arquivo que ainda não existe.
+- Colocar testes em test/, nunca em lib/.
+- Validar cada grupo de alterações antes de iniciar o próximo.
 
-O trabalho deve avançar em incrementos pequenos. Decisões arquiteturais relevantes ficam em docs/decisions.md.
+## Commits
+
+Separar por responsabilidade:
+
+- modelo ou regra de domínio;
+- tela ou componente;
+- persistência;
+- testes;
+- documentação.
+
+O usuário deve revisar o diff antes de executar os commits.
+
+## Documentação
+
+O plano atual está em docs/plan.md. O estado de validação está em docs/checks.md. Decisões arquiteturais ficam em docs/decisions.md.
