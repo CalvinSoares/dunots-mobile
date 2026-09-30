@@ -1,15 +1,18 @@
 import 'package:flutter/material.dart';
 
 import '../../shared/widgets/study_widgets.dart';
+import 'data/study_node_repository.dart';
 import 'data/study_track_repository.dart';
 import 'domain/study_track.dart';
 import 'presentation/study_tracks_controller.dart';
 import 'presentation/study_track_list_item.dart';
+import 'presentation/study_track_details_page.dart';
 
 class RoadmapsPreviewPage extends StatefulWidget {
   final StudyTrackRepository? repository;
+  final StudyNodeRepository? nodeRepository;
 
-  const RoadmapsPreviewPage({super.key, this.repository});
+  const RoadmapsPreviewPage({super.key, this.repository, this.nodeRepository});
 
   @override
   State<RoadmapsPreviewPage> createState() => _RoadmapsPreviewPageState();
@@ -17,6 +20,7 @@ class RoadmapsPreviewPage extends StatefulWidget {
 
 class _RoadmapsPreviewPageState extends State<RoadmapsPreviewPage> {
   late final StudyTracksController _controller;
+  late final StudyNodeRepository _nodeRepository;
 
   @override
   void initState() {
@@ -24,6 +28,7 @@ class _RoadmapsPreviewPageState extends State<RoadmapsPreviewPage> {
     _controller = StudyTracksController(
       repository: widget.repository ?? InMemoryStudyTrackRepository(),
     );
+    _nodeRepository = widget.nodeRepository ?? InMemoryStudyNodeRepository();
     _controller.load();
   }
 
@@ -87,6 +92,15 @@ class _RoadmapsPreviewPageState extends State<RoadmapsPreviewPage> {
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(error.message.toString())));
     }
+  }
+
+  void _openTrack(StudyTrack track) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) =>
+            StudyTrackDetailsPage(track: track, repository: _nodeRepository),
+      ),
+    );
   }
 
   Future<void> _showEditTrackDialog(
@@ -193,6 +207,7 @@ class _RoadmapsPreviewPageState extends State<RoadmapsPreviewPage> {
               padding: const EdgeInsets.only(bottom: 10),
               child: StudyTrackListItem(
                 track: track,
+                onOpen: () => _openTrack(track),
                 onEdit: () => _showEditTrackDialog(context, track),
                 onDelete: () => _confirmDeleteTrack(context, track),
               ),

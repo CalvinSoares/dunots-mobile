@@ -4,12 +4,14 @@ import '../domain/study_track.dart';
 
 class StudyTrackListItem extends StatelessWidget {
   final StudyTrack track;
+  final VoidCallback onOpen;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
   const StudyTrackListItem({
     super.key,
     required this.track,
+    required this.onOpen,
     required this.onEdit,
     required this.onDelete,
   });
@@ -57,6 +59,11 @@ class StudyTrackListItem extends StatelessWidget {
                 ),
               ],
             ),
+          ),
+          IconButton(
+            tooltip: 'Abrir trilha',
+            onPressed: onOpen,
+            icon: const Icon(Icons.chevron_right_rounded),
           ),
           IconButton(
             tooltip: 'Editar trilha',
