@@ -2,11 +2,16 @@ import 'package:flutter/material.dart';
 
 import '../features/flashcards/flashcards_preview_page.dart';
 import '../features/more/more_page.dart';
+import '../features/roadmaps/data/study_node_repository.dart';
+import '../features/roadmaps/data/study_track_repository.dart';
 import '../features/roadmaps/roadmaps_preview_page.dart';
 import '../features/today/today_page.dart';
 
 class DunotsHomeShell extends StatefulWidget {
-  const DunotsHomeShell({super.key});
+  final StudyTrackRepository? trackRepository;
+  final StudyNodeRepository? nodeRepository;
+
+  const DunotsHomeShell({super.key, this.trackRepository, this.nodeRepository});
 
   @override
   State<DunotsHomeShell> createState() => _DunotsHomeShellState();
@@ -14,13 +19,21 @@ class DunotsHomeShell extends StatefulWidget {
 
 class _DunotsHomeShellState extends State<DunotsHomeShell> {
   int selectedIndex = 0;
+  late final List<Widget> pages;
 
-  static const pages = <Widget>[
-    TodayPage(),
-    FlashcardsPreviewPage(),
-    RoadmapsPreviewPage(),
-    MorePage(),
-  ];
+  @override
+  void initState() {
+    super.initState();
+    pages = [
+      const TodayPage(),
+      const FlashcardsPreviewPage(),
+      RoadmapsPreviewPage(
+        repository: widget.trackRepository,
+        nodeRepository: widget.nodeRepository,
+      ),
+      const MorePage(),
+    ];
+  }
 
   @override
   Widget build(BuildContext context) {

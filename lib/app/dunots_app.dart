@@ -1,9 +1,14 @@
 import 'package:flutter/material.dart';
 
+import '../features/roadmaps/data/study_node_repository.dart';
+import '../features/roadmaps/data/study_track_repository.dart';
 import 'dunots_home_shell.dart';
 
 class DunotsMobileApp extends StatelessWidget {
-  const DunotsMobileApp({super.key});
+  final StudyTrackRepository? trackRepository;
+  final StudyNodeRepository? nodeRepository;
+
+  const DunotsMobileApp({super.key, this.trackRepository, this.nodeRepository});
 
   @override
   Widget build(BuildContext context) {
@@ -48,7 +53,10 @@ class DunotsMobileApp extends StatelessWidget {
           ),
         ),
       ),
-      home: const DunotsHomeShell(),
+      home: DunotsHomeShell(
+        trackRepository: trackRepository,
+        nodeRepository: nodeRepository,
+      ),
     );
   }
 }
