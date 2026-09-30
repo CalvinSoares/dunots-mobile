@@ -153,10 +153,14 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
                     ],
                   ),
                 ),
-                IconButton(
-                  tooltip: 'Adicionar subtópico',
-                  onPressed: () => _showNodeDialog(context, parentId: node.id),
-                  icon: const Icon(Icons.add_circle_outline),
+                _NodeActions(
+                  canMoveUp: _canMove(node, nodes, direction: -1),
+                  canMoveDown: _canMove(node, nodes, direction: 1),
+                  onAddChild: () => _showNodeDialog(context, parentId: node.id),
+                  onEdit: () => _showNodeDialog(context, node: node),
+                  onDelete: () => _confirmDelete(context, node),
+                  onMoveUp: () => _controller.moveNode(node.id, direction: -1),
+                  onMoveDown: () => _controller.moveNode(node.id, direction: 1),
                 ),
               ],
             ),
@@ -171,10 +175,30 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
     return widgets;
   }
 
-  Future<void> _showNodeDialog(BuildContext context, {String? parentId}) async {
+  bool _canMove(
+    StudyNode node,
+    List<StudyNode> nodes, {
+    required int direction,
+  }) {
+    final siblings =
+        nodes.where((candidate) => candidate.parentId == node.parentId).toList()
+          ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+    final index = siblings.indexWhere((candidate) => candidate.id == node.id);
+    final target = index + direction;
+    return index >= 0 && target >= 0 && target < siblings.length;
+  }
+
+  Future<void> _showNodeDialog(
+    BuildContext context, {
+    String? parentId,
+    StudyNode? node,
+  }) async {
     final data = await showDialog<_NodeFormData>(
       context: context,
-      builder: (_) => _NodeFormDialog(isChild: parentId != null),
+      builder: (_) => _NodeFormDialog(
+        isChild: parentId != null || node?.parentId != null,
+        node: node,
+      ),
     );
 
     if (data == null || !mounted) {
@@ -182,11 +206,19 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
     }
 
     try {
-      await _controller.createNode(
-        title: data.title,
-        description: data.description,
-        parentId: parentId,
-      );
+      if (node == null) {
+        await _controller.createNode(
+          title: data.title,
+          description: data.description,
+          parentId: parentId,
+        );
+      } else {
+        await _controller.updateNode(
+          id: node.id,
+          title: data.title,
+          description: data.description,
+        );
+      }
     } on ArgumentError catch (error) {
       if (!context.mounted) {
         return;
@@ -195,6 +227,98 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(error.message.toString())));
     }
+  }
+
+  Future<void> _confirmDelete(BuildContext context, StudyNode node) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Excluir tópico?'),
+        content: Text(
+          '"${node.title}" e todos os seus subtópicos serão removidos.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Excluir'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) {
+      return;
+    }
+
+    await _controller.deleteNode(node.id);
+  }
+}
+
+class _NodeActions extends StatelessWidget {
+  final bool canMoveUp;
+  final bool canMoveDown;
+  final VoidCallback onAddChild;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+  final VoidCallback onMoveUp;
+  final VoidCallback onMoveDown;
+
+  const _NodeActions({
+    required this.canMoveUp,
+    required this.canMoveDown,
+    required this.onAddChild,
+    required this.onEdit,
+    required this.onDelete,
+    required this.onMoveUp,
+    required this.onMoveDown,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              tooltip: 'Adicionar subtópico',
+              onPressed: onAddChild,
+              icon: const Icon(Icons.add_circle_outline),
+            ),
+            IconButton(
+              tooltip: 'Editar tópico',
+              onPressed: onEdit,
+              icon: const Icon(Icons.edit_outlined),
+            ),
+            IconButton(
+              tooltip: 'Excluir tópico',
+              onPressed: onDelete,
+              icon: const Icon(Icons.delete_outline),
+            ),
+          ],
+        ),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              tooltip: 'Mover para cima',
+              onPressed: canMoveUp ? onMoveUp : null,
+              icon: const Icon(Icons.keyboard_arrow_up),
+            ),
+            IconButton(
+              tooltip: 'Mover para baixo',
+              onPressed: canMoveDown ? onMoveDown : null,
+              icon: const Icon(Icons.keyboard_arrow_down),
+            ),
+          ],
+        ),
+      ],
+    );
   }
 }
 
@@ -207,17 +331,27 @@ class _NodeFormData {
 
 class _NodeFormDialog extends StatefulWidget {
   final bool isChild;
+  final StudyNode? node;
 
-  const _NodeFormDialog({required this.isChild});
+  const _NodeFormDialog({required this.isChild, this.node});
 
   @override
   State<_NodeFormDialog> createState() => _NodeFormDialogState();
 }
 
 class _NodeFormDialogState extends State<_NodeFormDialog> {
-  final titleController = TextEditingController();
-  final descriptionController = TextEditingController();
+  late final TextEditingController titleController;
+  late final TextEditingController descriptionController;
   String? validationError;
+
+  @override
+  void initState() {
+    super.initState();
+    titleController = TextEditingController(text: widget.node?.title);
+    descriptionController = TextEditingController(
+      text: widget.node?.description,
+    );
+  }
 
   @override
   void dispose() {
@@ -265,7 +399,10 @@ class _NodeFormDialogState extends State<_NodeFormDialog> {
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Cancelar'),
         ),
-        FilledButton(onPressed: _submit, child: const Text('Criar')),
+        FilledButton(
+          onPressed: _submit,
+          child: Text(widget.node == null ? 'Criar' : 'Salvar'),
+        ),
       ],
     );
   }
