@@ -1,5 +1,11 @@
 import 'package:flutter/material.dart';
 
+import '../../questions/data/question_repository.dart';
+import '../../questions/domain/question.dart';
+import '../../quizzes/data/quiz_attempt_repository.dart';
+import '../../quizzes/domain/quiz_attempt.dart';
+import '../../quizzes/quiz_attempt_page.dart';
+import '../../quizzes/quiz_form_dialog.dart';
 import '../data/study_material_repository.dart';
 import '../data/study_node_repository.dart';
 import '../data/study_track_repository.dart';
@@ -15,6 +21,8 @@ class StudyTrackDetailsPage extends StatefulWidget {
   final StudyTrackRepository? trackRepository;
   final StudyMaterialRepository? materialRepository;
   final StudyNodeMaterialRepository? materialLinkRepository;
+  final QuestionRepository? questionRepository;
+  final QuizAttemptRepository? attemptRepository;
 
   const StudyTrackDetailsPage({
     super.key,
@@ -23,6 +31,8 @@ class StudyTrackDetailsPage extends StatefulWidget {
     this.trackRepository,
     this.materialRepository,
     this.materialLinkRepository,
+    this.questionRepository,
+    this.attemptRepository,
   });
 
   @override
@@ -33,6 +43,8 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
   late final StudyNodesController _controller;
   late final StudyMaterialRepository _materialRepository;
   late final StudyNodeMaterialRepository _materialLinkRepository;
+  late final QuestionRepository _questionRepository;
+  late final QuizAttemptRepository _attemptRepository;
   final Map<String, List<StudyMaterialLink>> _linksByNode = {};
   String _searchQuery = '';
   StudyPriority? _priorityFilter;
@@ -49,6 +61,10 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
         widget.materialRepository ?? InMemoryStudyMaterialRepository();
     _materialLinkRepository =
         widget.materialLinkRepository ?? InMemoryStudyNodeMaterialRepository();
+    _questionRepository =
+        widget.questionRepository ?? InMemoryQuestionRepository();
+    _attemptRepository =
+        widget.attemptRepository ?? InMemoryQuizAttemptRepository();
     _loadNodes();
   }
 
@@ -76,10 +92,26 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
                     style: const TextStyle(color: Color(0xFFB6B7AD)),
                   ),
                   const SizedBox(height: 18),
-                  FilledButton.icon(
-                    onPressed: () => _showNodeDialog(context),
-                    icon: const Icon(Icons.add),
-                    label: const Text('Novo tópico'),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: [
+                      FilledButton.icon(
+                        onPressed: () => _showNodeDialog(context),
+                        icon: const Icon(Icons.add),
+                        label: const Text('Novo tópico'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: _showManualQuestionSelection,
+                        icon: const Icon(Icons.checklist),
+                        label: const Text('Selecionar questões da trilha'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: _showTopicQuizBuilder,
+                        icon: const Icon(Icons.account_tree_outlined),
+                        label: const Text('Montar simulado por tópicos'),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 18),
                   _buildFilters(),
@@ -319,7 +351,16 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
                   onEdit: () => _showNodeDialog(context, node: node),
                   onDelete: () => _confirmDelete(context, node),
                   linkedMaterialsCount: _linksByNode[node.id]?.length ?? 0,
+                  linkedQuestionCount:
+                      _linksByNode[node.id]
+                          ?.where(
+                            (link) =>
+                                link.materialType == StudyMaterialType.question,
+                          )
+                          .length ??
+                      0,
                   onLinkMaterial: () => _showMaterialDialog(context, node),
+                  onStartQuiz: () => _startQuizFromNode(node),
                   onMoveUp: () => _moveNode(node.id, direction: -1),
                   onMoveDown: () => _moveNode(node.id, direction: 1),
                 ),
@@ -403,6 +444,203 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
 
     await _materialLinkRepository.replaceForNode(node.id, links);
     await _loadLinks();
+  }
+
+  Future<void> _startQuizFromNode(StudyNode node) async {
+    await _openQuizBuilder(_questionIdsForNodes(_descendantIds(node.id)));
+  }
+
+  Future<void> _showManualQuestionSelection() async {
+    final nodeIds = _controller.state.nodes.map((node) => node.id).toSet();
+    final questionIds = _questionIdsForNodes(nodeIds);
+    final questions = await _questionRepository.getAll();
+    final linkedQuestions = questions
+        .where((question) => questionIds.contains(question.id))
+        .toList();
+
+    if (!mounted) {
+      return;
+    }
+    if (linkedQuestions.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Vincule questões a um tópico antes de iniciar.'),
+        ),
+      );
+      return;
+    }
+
+    final selectedIds = await showDialog<List<String>>(
+      context: context,
+      builder: (_) => _QuestionSelectionDialog(
+        questions: linkedQuestions,
+        questionOrder: questionIds,
+      ),
+    );
+    if (selectedIds == null || !mounted) {
+      return;
+    }
+    await _openQuizBuilder(selectedIds);
+  }
+
+  Future<void> _showTopicQuizBuilder() async {
+    final nodes = List<StudyNode>.of(_controller.state.nodes)
+      ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+    if (nodes.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Crie tópicos antes de montar o simulado.'),
+        ),
+      );
+      return;
+    }
+
+    final selectedNodeIds = await showDialog<Set<String>>(
+      context: context,
+      builder: (_) => _TopicSelectionDialog(nodes: nodes),
+    );
+    if (selectedNodeIds == null || !mounted) {
+      return;
+    }
+
+    final questionIds = _questionIdsForNodes(selectedNodeIds);
+    final questions = await _questionRepository.getAll();
+    final linkedQuestions = questions
+        .where((question) => questionIds.contains(question.id))
+        .toList();
+    if (!mounted) {
+      return;
+    }
+    if (linkedQuestions.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Os tópicos escolhidos não possuem questões vinculadas.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    final selectedQuestionIds = await showDialog<List<String>>(
+      context: context,
+      builder: (_) => _QuestionSelectionDialog(
+        questions: linkedQuestions,
+        questionOrder: questionIds,
+      ),
+    );
+    if (selectedQuestionIds == null || !mounted) {
+      return;
+    }
+    await _openQuizBuilder(selectedQuestionIds);
+  }
+
+  List<String> _questionIdsForNodes(Set<String> nodeIds) {
+    final questionIds = <String>[];
+    for (final candidate in _controller.state.nodes) {
+      if (!nodeIds.contains(candidate.id)) {
+        continue;
+      }
+      for (final link in _linksByNode[candidate.id] ?? const []) {
+        if (link.materialType == StudyMaterialType.question &&
+            !questionIds.contains(link.materialId)) {
+          questionIds.add(link.materialId);
+        }
+      }
+    }
+    return questionIds;
+  }
+
+  Future<void> _openQuizBuilder(List<String> questionIds) async {
+    final questions = await _questionRepository.getAll();
+    final availableIds = questions.map((question) => question.id).toSet();
+    final validQuestionIds = questionIds
+        .where(availableIds.contains)
+        .toList(growable: false);
+    if (validQuestionIds.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Vincule questões a este tópico antes de iniciar.'),
+          ),
+        );
+      }
+      return;
+    }
+
+    if (!mounted) {
+      return;
+    }
+    final questionsById = {
+      for (final question in questions) question.id: question,
+    };
+    final orderedQuestions = validQuestionIds
+        .map((id) => questionsById[id])
+        .whereType<Question>()
+        .toList(growable: false);
+    final reviewedQuestionIds = await showDialog<List<String>>(
+      context: context,
+      builder: (_) => _QuizSelectionSummaryDialog(
+        questions: orderedQuestions,
+        questionOrder: validQuestionIds,
+        topicByQuestionId: _topicLabelsForQuestions(validQuestionIds),
+      ),
+    );
+    if (reviewedQuestionIds == null || !mounted) {
+      return;
+    }
+
+    final data = await showDialog<QuizFormData>(
+      context: context,
+      builder: (_) => const QuizFormDialog(),
+    );
+    if (data == null || !mounted) {
+      return;
+    }
+
+    final now = DateTime.now();
+    final attempt = QuizAttempt(
+      id: 'quiz-${now.microsecondsSinceEpoch}',
+      title: data.title,
+      questionIds: List.unmodifiable(reviewedQuestionIds),
+      currentIndex: 0,
+      status: QuizAttemptStatus.inProgress,
+      answers: const {},
+      createdAt: now,
+      updatedAt: now,
+    );
+    await _attemptRepository.create(attempt);
+    if (!mounted) {
+      return;
+    }
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => QuizAttemptPage(
+          attempt: attempt,
+          questionRepository: _questionRepository,
+          attemptRepository: _attemptRepository,
+        ),
+      ),
+    );
+  }
+
+  Map<String, String> _topicLabelsForQuestions(Iterable<String> questionIds) {
+    final wantedIds = questionIds.toSet();
+    final labelsByQuestion = <String, List<String>>{};
+    for (final node in _controller.state.nodes) {
+      for (final link in _linksByNode[node.id] ?? const []) {
+        if (link.materialType == StudyMaterialType.question &&
+            wantedIds.contains(link.materialId)) {
+          labelsByQuestion
+              .putIfAbsent(link.materialId, () => [])
+              .add(node.title);
+        }
+      }
+    }
+    return {
+      for (final entry in labelsByQuestion.entries)
+        entry.key: entry.value.toSet().join(' · '),
+    };
   }
 
   Future<void> _syncTrackProgress() async {
@@ -534,7 +772,9 @@ class _NodeActions extends StatelessWidget {
   final VoidCallback onMoveUp;
   final VoidCallback onMoveDown;
   final int linkedMaterialsCount;
+  final int linkedQuestionCount;
   final VoidCallback onLinkMaterial;
+  final VoidCallback onStartQuiz;
 
   const _NodeActions({
     required this.canMoveUp,
@@ -545,7 +785,9 @@ class _NodeActions extends StatelessWidget {
     required this.onMoveUp,
     required this.onMoveDown,
     required this.linkedMaterialsCount,
+    required this.linkedQuestionCount,
     required this.onLinkMaterial,
+    required this.onStartQuiz,
   });
 
   @override
@@ -578,6 +820,15 @@ class _NodeActions extends StatelessWidget {
                 isLabelVisible: linkedMaterialsCount > 0,
                 label: Text('$linkedMaterialsCount'),
                 child: const Icon(Icons.link),
+              ),
+            ),
+            IconButton(
+              tooltip: 'Montar simulado com questões vinculadas',
+              onPressed: linkedQuestionCount == 0 ? null : onStartQuiz,
+              icon: Badge(
+                isLabelVisible: linkedQuestionCount > 0,
+                label: Text('$linkedQuestionCount'),
+                child: const Icon(Icons.quiz_outlined),
               ),
             ),
           ],
@@ -629,6 +880,369 @@ class _MaterialLinkDialog extends StatefulWidget {
 
   @override
   State<_MaterialLinkDialog> createState() => _MaterialLinkDialogState();
+}
+
+class _TopicSelectionDialog extends StatefulWidget {
+  final List<StudyNode> nodes;
+
+  const _TopicSelectionDialog({required this.nodes});
+
+  @override
+  State<_TopicSelectionDialog> createState() => _TopicSelectionDialogState();
+}
+
+class _TopicSelectionDialogState extends State<_TopicSelectionDialog> {
+  final Set<String> selectedIds = {};
+  String query = '';
+
+  @override
+  Widget build(BuildContext context) {
+    final normalizedQuery = query.trim().toLowerCase();
+    final visibleRows = _topicRows(widget.nodes).where((row) {
+      final searchable =
+          '${row.node.title} ${row.node.description} ${row.node.notes}'
+              .toLowerCase();
+      return normalizedQuery.isEmpty || searchable.contains(normalizedQuery);
+    }).toList();
+
+    return AlertDialog(
+      title: const Text('Selecionar tópicos'),
+      content: SizedBox(
+        width: 560,
+        height: 460,
+        child: Column(
+          children: [
+            Text(
+              '${selectedIds.length} selecionado(s) de ${widget.nodes.length}',
+              style: const TextStyle(color: Color(0xFFB6B7AD)),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              autofocus: true,
+              onChanged: (value) => setState(() => query = value),
+              decoration: const InputDecoration(
+                prefixIcon: Icon(Icons.search),
+                labelText: 'Buscar tópicos',
+                hintText: 'Título, descrição ou anotação',
+              ),
+            ),
+            const SizedBox(height: 10),
+            Expanded(
+              child: visibleRows.isEmpty
+                  ? const Center(child: Text('Nenhum tópico encontrado.'))
+                  : ListView.builder(
+                      itemCount: visibleRows.length,
+                      itemBuilder: (context, index) {
+                        final row = visibleRows[index];
+                        return CheckboxListTile(
+                          value: selectedIds.contains(row.node.id),
+                          contentPadding: EdgeInsets.only(
+                            left: row.depth * 22.0,
+                            right: 0,
+                          ),
+                          onChanged: (checked) {
+                            final relatedIds = _descendantIds(
+                              row.node.id,
+                              widget.nodes,
+                            );
+                            setState(() {
+                              if (checked == true) {
+                                selectedIds.addAll(relatedIds);
+                              } else {
+                                selectedIds.removeAll(relatedIds);
+                              }
+                            });
+                          },
+                          controlAffinity: ListTileControlAffinity.leading,
+                          title: Text(row.node.title),
+                          subtitle: row.node.description.isEmpty
+                              ? null
+                              : Text(
+                                  row.node.description,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton(
+          onPressed: selectedIds.isEmpty
+              ? null
+              : () => Navigator.of(context).pop(Set.of(selectedIds)),
+          child: const Text('Continuar'),
+        ),
+      ],
+    );
+  }
+}
+
+class _QuizSelectionSummaryDialog extends StatefulWidget {
+  final List<Question> questions;
+  final List<String> questionOrder;
+  final Map<String, String> topicByQuestionId;
+
+  const _QuizSelectionSummaryDialog({
+    required this.questions,
+    required this.questionOrder,
+    required this.topicByQuestionId,
+  });
+
+  @override
+  State<_QuizSelectionSummaryDialog> createState() =>
+      _QuizSelectionSummaryDialogState();
+}
+
+class _QuizSelectionSummaryDialogState
+    extends State<_QuizSelectionSummaryDialog> {
+  late final List<String> selectedIds;
+
+  @override
+  void initState() {
+    super.initState();
+    selectedIds = List.of(widget.questionOrder);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final questionsById = {
+      for (final question in widget.questions) question.id: question,
+    };
+    final selectedQuestions = selectedIds
+        .map((id) => questionsById[id])
+        .whereType<Question>()
+        .toList(growable: false);
+
+    return AlertDialog(
+      title: const Text('Revisar seleção'),
+      content: SizedBox(
+        width: 600,
+        height: 500,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${selectedQuestions.length} questão(ões) no simulado',
+              style: const TextStyle(color: Color(0xFFB6B7AD)),
+            ),
+            const SizedBox(height: 12),
+            Expanded(
+              child: selectedQuestions.isEmpty
+                  ? const Center(
+                      child: Text('Remova todas as questões da seleção.'),
+                    )
+                  : ListView.separated(
+                      itemCount: selectedQuestions.length,
+                      separatorBuilder: (_, _) => const Divider(height: 1),
+                      itemBuilder: (context, index) {
+                        final question = selectedQuestions[index];
+                        final topic = widget.topicByQuestionId[question.id];
+                        return ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: CircleAvatar(
+                            radius: 16,
+                            child: Text('${index + 1}'),
+                          ),
+                          title: Text(
+                            question.statement,
+                            maxLines: 3,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          subtitle: Text(
+                            [
+                              if (topic != null && topic.isNotEmpty) topic,
+                              if (question.topic.isNotEmpty) question.topic,
+                              if (question.exam.isNotEmpty) question.exam,
+                            ].join(' · '),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          trailing: IconButton(
+                            tooltip: 'Remover questão',
+                            onPressed: () =>
+                                setState(() => selectedIds.remove(question.id)),
+                            icon: const Icon(Icons.remove_circle_outline),
+                          ),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton(
+          onPressed: selectedIds.isEmpty
+              ? null
+              : () => Navigator.of(context).pop(List.of(selectedIds)),
+          child: Text('Continuar (${selectedIds.length})'),
+        ),
+      ],
+    );
+  }
+}
+
+class _TopicRow {
+  final StudyNode node;
+  final int depth;
+
+  const _TopicRow(this.node, this.depth);
+}
+
+List<_TopicRow> _topicRows(
+  List<StudyNode> nodes, {
+  String? parentId,
+  int depth = 0,
+}) {
+  final children = nodes.where((node) => node.parentId == parentId).toList()
+    ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+  final rows = <_TopicRow>[];
+  for (final node in children) {
+    rows.add(_TopicRow(node, depth));
+    rows.addAll(_topicRows(nodes, parentId: node.id, depth: depth + 1));
+  }
+  return rows;
+}
+
+Set<String> _descendantIds(String nodeId, List<StudyNode> nodes) {
+  final ids = <String>{nodeId};
+  var added = true;
+  while (added) {
+    added = false;
+    for (final node in nodes) {
+      if (node.parentId != null &&
+          ids.contains(node.parentId) &&
+          ids.add(node.id)) {
+        added = true;
+      }
+    }
+  }
+  return ids;
+}
+
+class _QuestionSelectionDialog extends StatefulWidget {
+  final List<Question> questions;
+  final List<String> questionOrder;
+
+  const _QuestionSelectionDialog({
+    required this.questions,
+    required this.questionOrder,
+  });
+
+  @override
+  State<_QuestionSelectionDialog> createState() =>
+      _QuestionSelectionDialogState();
+}
+
+class _QuestionSelectionDialogState extends State<_QuestionSelectionDialog> {
+  final Set<String> selectedIds = {};
+  String query = '';
+
+  @override
+  Widget build(BuildContext context) {
+    final normalizedQuery = query.trim().toLowerCase();
+    final visibleQuestions = widget.questions.where((question) {
+      final searchable = [
+        question.number?.toString() ?? '',
+        question.statement,
+        question.contest,
+        question.role,
+        question.topic,
+        question.exam,
+      ].join(' ').toLowerCase();
+      return normalizedQuery.isEmpty || searchable.contains(normalizedQuery);
+    }).toList();
+
+    return AlertDialog(
+      title: const Text('Selecionar questões'),
+      content: SizedBox(
+        width: 560,
+        height: 500,
+        child: Column(
+          children: [
+            Text(
+              '${selectedIds.length} selecionada(s) de ${widget.questions.length}',
+              style: const TextStyle(color: Color(0xFFB6B7AD)),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              autofocus: true,
+              onChanged: (value) => setState(() => query = value),
+              decoration: const InputDecoration(
+                prefixIcon: Icon(Icons.search),
+                labelText: 'Buscar questões',
+                hintText: 'Número, enunciado, tópico ou prova',
+              ),
+            ),
+            const SizedBox(height: 10),
+            Expanded(
+              child: visibleQuestions.isEmpty
+                  ? const Center(child: Text('Nenhuma questão encontrada.'))
+                  : ListView.builder(
+                      itemCount: visibleQuestions.length,
+                      itemBuilder: (context, index) {
+                        final question = visibleQuestions[index];
+                        final metadata = [
+                          if (question.contest.isNotEmpty) question.contest,
+                          if (question.exam.isNotEmpty) question.exam,
+                          if (question.topic.isNotEmpty) question.topic,
+                        ].join(' · ');
+                        return CheckboxListTile(
+                          value: selectedIds.contains(question.id),
+                          onChanged: (checked) {
+                            setState(() {
+                              if (checked == true) {
+                                selectedIds.add(question.id);
+                              } else {
+                                selectedIds.remove(question.id);
+                              }
+                            });
+                          },
+                          controlAffinity: ListTileControlAffinity.leading,
+                          title: Text(
+                            '#${question.number ?? index + 1} · ${question.statement}',
+                            maxLines: 3,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          subtitle: metadata.isEmpty ? null : Text(metadata),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton(
+          onPressed: selectedIds.isEmpty
+              ? null
+              : () {
+                  final orderedIds = widget.questionOrder
+                      .where(selectedIds.contains)
+                      .toList(growable: false);
+                  Navigator.of(context).pop(orderedIds);
+                },
+          child: const Text('Criar simulado'),
+        ),
+      ],
+    );
+  }
 }
 
 class _MaterialLinkDialogState extends State<_MaterialLinkDialog> {
