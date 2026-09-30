@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
+import '../data/study_material_repository.dart';
 import '../data/study_node_repository.dart';
 import '../data/study_track_repository.dart';
 import '../domain/study_node.dart';
+import '../domain/study_material.dart';
 import '../domain/study_track.dart';
 import 'study_node_filters.dart';
 import 'study_nodes_controller.dart';
@@ -11,12 +13,16 @@ class StudyTrackDetailsPage extends StatefulWidget {
   final StudyTrack track;
   final StudyNodeRepository repository;
   final StudyTrackRepository? trackRepository;
+  final StudyMaterialRepository? materialRepository;
+  final StudyNodeMaterialRepository? materialLinkRepository;
 
   const StudyTrackDetailsPage({
     super.key,
     required this.track,
     required this.repository,
     this.trackRepository,
+    this.materialRepository,
+    this.materialLinkRepository,
   });
 
   @override
@@ -25,6 +31,9 @@ class StudyTrackDetailsPage extends StatefulWidget {
 
 class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
   late final StudyNodesController _controller;
+  late final StudyMaterialRepository _materialRepository;
+  late final StudyNodeMaterialRepository _materialLinkRepository;
+  final Map<String, List<StudyMaterialLink>> _linksByNode = {};
   String _searchQuery = '';
   StudyPriority? _priorityFilter;
   StudyNodeCompletionFilter _completionFilter = StudyNodeCompletionFilter.all;
@@ -36,6 +45,10 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
       trackId: widget.track.id,
       repository: widget.repository,
     );
+    _materialRepository =
+        widget.materialRepository ?? InMemoryStudyMaterialRepository();
+    _materialLinkRepository =
+        widget.materialLinkRepository ?? InMemoryStudyNodeMaterialRepository();
     _loadNodes();
   }
 
@@ -305,6 +318,8 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
                   onAddChild: () => _showNodeDialog(context, parentId: node.id),
                   onEdit: () => _showNodeDialog(context, node: node),
                   onDelete: () => _confirmDelete(context, node),
+                  linkedMaterialsCount: _linksByNode[node.id]?.length ?? 0,
+                  onLinkMaterial: () => _showMaterialDialog(context, node),
                   onMoveUp: () => _moveNode(node.id, direction: -1),
                   onMoveDown: () => _moveNode(node.id, direction: 1),
                 ),
@@ -337,6 +352,23 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
   Future<void> _loadNodes() async {
     await _controller.load();
     await _syncTrackProgress();
+    await _loadLinks();
+  }
+
+  Future<void> _loadLinks() async {
+    final linksByNode = <String, List<StudyMaterialLink>>{};
+
+    for (final node in _controller.state.nodes) {
+      linksByNode[node.id] = await _materialLinkRepository.getForNode(node.id);
+    }
+
+    if (mounted) {
+      setState(() {
+        _linksByNode
+          ..clear()
+          ..addAll(linksByNode);
+      });
+    }
   }
 
   Future<void> _toggleCompletion(String nodeId) async {
@@ -347,6 +379,30 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
   Future<void> _moveNode(String nodeId, {required int direction}) async {
     await _controller.moveNode(nodeId, direction: direction);
     await _syncTrackProgress();
+  }
+
+  Future<void> _showMaterialDialog(BuildContext context, StudyNode node) async {
+    final materials = await _materialRepository.getAll();
+    final selectedLinks = await _materialLinkRepository.getForNode(node.id);
+    if (!context.mounted) {
+      return;
+    }
+
+    final links = await showDialog<List<StudyMaterialLink>>(
+      context: context,
+      builder: (_) => _MaterialLinkDialog(
+        nodeId: node.id,
+        materials: materials,
+        initialLinks: selectedLinks,
+      ),
+    );
+
+    if (links == null || !context.mounted) {
+      return;
+    }
+
+    await _materialLinkRepository.replaceForNode(node.id, links);
+    await _loadLinks();
   }
 
   Future<void> _syncTrackProgress() async {
@@ -441,8 +497,31 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
       return;
     }
 
+    final deletedNodeIds = _descendantIds(node.id);
     await _controller.deleteNode(node.id);
+    for (final deletedNodeId in deletedNodeIds) {
+      await _materialLinkRepository.deleteForNode(deletedNodeId);
+    }
+    await _loadLinks();
     await _syncTrackProgress();
+  }
+
+  Set<String> _descendantIds(String nodeId) {
+    final ids = <String>{nodeId};
+    var added = true;
+
+    while (added) {
+      added = false;
+      for (final node in _controller.state.nodes) {
+        if (node.parentId != null &&
+            ids.contains(node.parentId) &&
+            ids.add(node.id)) {
+          added = true;
+        }
+      }
+    }
+
+    return ids;
   }
 }
 
@@ -454,6 +533,8 @@ class _NodeActions extends StatelessWidget {
   final VoidCallback onDelete;
   final VoidCallback onMoveUp;
   final VoidCallback onMoveDown;
+  final int linkedMaterialsCount;
+  final VoidCallback onLinkMaterial;
 
   const _NodeActions({
     required this.canMoveUp,
@@ -463,6 +544,8 @@ class _NodeActions extends StatelessWidget {
     required this.onDelete,
     required this.onMoveUp,
     required this.onMoveDown,
+    required this.linkedMaterialsCount,
+    required this.onLinkMaterial,
   });
 
   @override
@@ -487,6 +570,15 @@ class _NodeActions extends StatelessWidget {
               tooltip: 'Excluir tópico',
               onPressed: onDelete,
               icon: const Icon(Icons.delete_outline),
+            ),
+            IconButton(
+              tooltip: 'Vincular material',
+              onPressed: onLinkMaterial,
+              icon: Badge(
+                isLabelVisible: linkedMaterialsCount > 0,
+                label: Text('$linkedMaterialsCount'),
+                child: const Icon(Icons.link),
+              ),
             ),
           ],
         ),
@@ -522,6 +614,129 @@ class _NodeFormData {
     required this.notes,
     required this.priority,
   });
+}
+
+class _MaterialLinkDialog extends StatefulWidget {
+  final String nodeId;
+  final List<StudyMaterial> materials;
+  final List<StudyMaterialLink> initialLinks;
+
+  const _MaterialLinkDialog({
+    required this.nodeId,
+    required this.materials,
+    required this.initialLinks,
+  });
+
+  @override
+  State<_MaterialLinkDialog> createState() => _MaterialLinkDialogState();
+}
+
+class _MaterialLinkDialogState extends State<_MaterialLinkDialog> {
+  late final Set<StudyMaterialLink> selectedLinks;
+  String query = '';
+
+  @override
+  void initState() {
+    super.initState();
+    selectedLinks = widget.initialLinks.toSet();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final normalizedQuery = query.trim().toLowerCase();
+    final visibleMaterials = widget.materials.where((material) {
+      return normalizedQuery.isEmpty ||
+          '${material.title} ${material.subtitle}'.toLowerCase().contains(
+            normalizedQuery,
+          );
+    }).toList();
+
+    return AlertDialog(
+      title: const Text('Vincular materiais'),
+      content: SizedBox(
+        width: double.maxFinite,
+        height: 420,
+        child: Column(
+          children: [
+            TextField(
+              autofocus: true,
+              onChanged: (value) => setState(() => query = value),
+              decoration: const InputDecoration(
+                prefixIcon: Icon(Icons.search),
+                labelText: 'Buscar material',
+              ),
+            ),
+            const SizedBox(height: 10),
+            Expanded(
+              child: visibleMaterials.isEmpty
+                  ? const Center(child: Text('Nenhum material encontrado.'))
+                  : ListView.builder(
+                      itemCount: visibleMaterials.length,
+                      itemBuilder: (context, index) {
+                        final material = visibleMaterials[index];
+                        final link = StudyMaterialLink(
+                          nodeId: widget.nodeId,
+                          materialId: material.id,
+                          materialType: material.type,
+                        );
+                        return CheckboxListTile(
+                          value: selectedLinks.contains(link),
+                          onChanged: (checked) {
+                            setState(() {
+                              if (checked == true) {
+                                selectedLinks.add(link);
+                              } else {
+                                selectedLinks.remove(link);
+                              }
+                            });
+                          },
+                          secondary: Icon(_materialTypeIcon(material.type)),
+                          title: Text(material.title),
+                          subtitle: Text(
+                            '${_materialTypeLabel(material.type)} · ${material.subtitle}',
+                          ),
+                          controlAffinity: ListTileControlAffinity.leading,
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(selectedLinks.toList()),
+          child: const Text('Salvar vínculos'),
+        ),
+      ],
+    );
+  }
+}
+
+String _materialTypeLabel(StudyMaterialType type) {
+  switch (type) {
+    case StudyMaterialType.flashcard:
+      return 'Flashcard';
+    case StudyMaterialType.question:
+      return 'Questão';
+    case StudyMaterialType.document:
+      return 'Material';
+  }
+}
+
+IconData _materialTypeIcon(StudyMaterialType type) {
+  switch (type) {
+    case StudyMaterialType.flashcard:
+      return Icons.style_outlined;
+    case StudyMaterialType.question:
+      return Icons.quiz_outlined;
+    case StudyMaterialType.document:
+      return Icons.description_outlined;
+  }
 }
 
 class _PriorityFlag extends StatelessWidget {
