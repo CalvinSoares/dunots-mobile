@@ -12,7 +12,7 @@ class AppDatabase {
         path.join(await getDatabasesPath(), 'dunots.db');
     final database = await openDatabase(
       databasePath,
-      version: 21,
+      version: 22,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
       },
@@ -54,6 +54,8 @@ class AppDatabase {
         await _createQuestionsTable(database);
         await _createQuizExamsTable(database);
         await _createQuizAttemptsTable(database);
+        await _createChallengeTable(database);
+        await _createDiagramTable(database);
         await _createSyncTables(database);
       },
       onUpgrade: (database, oldVersion, newVersion) async {
@@ -200,6 +202,29 @@ class AppDatabase {
         if (oldVersion < 21) {
           await _createSyncTables(database);
         }
+        if (oldVersion < 22) {
+          await database.execute(
+            "ALTER TABLE flashcards ADD COLUMN diagram_ids TEXT NOT NULL DEFAULT '[]'",
+          );
+          await database.execute(
+            'ALTER TABLE flashcards ADD COLUMN interval INTEGER NOT NULL DEFAULT 0',
+          );
+          await database.execute(
+            'ALTER TABLE flashcards ADD COLUMN ease_factor REAL NOT NULL DEFAULT 2.5',
+          );
+          await database.execute(
+            'ALTER TABLE flashcards ADD COLUMN repetitions INTEGER NOT NULL DEFAULT 0',
+          );
+          await database.execute(
+            "ALTER TABLE flashcards ADD COLUMN updated_at TEXT NOT NULL DEFAULT ''",
+          );
+          await database.execute(
+            "UPDATE flashcards SET updated_at = COALESCE(last_reviewed_at, created_at) WHERE updated_at = ''",
+          );
+          await _createChallengeTable(database);
+          await _createDiagramTable(database);
+          await _createSyncTables(database);
+        }
       },
     );
 
@@ -229,11 +254,16 @@ class AppDatabase {
         code TEXT NOT NULL DEFAULT '',
         tags TEXT NOT NULL DEFAULT '[]',
         linked_material_ids TEXT NOT NULL DEFAULT '[]',
+        diagram_ids TEXT NOT NULL DEFAULT '[]',
         created_at TEXT NOT NULL,
         due_at TEXT NOT NULL,
         last_reviewed_at TEXT,
         review_count INTEGER NOT NULL DEFAULT 0,
-        last_rating TEXT
+        last_rating TEXT,
+        interval INTEGER NOT NULL DEFAULT 0,
+        ease_factor REAL NOT NULL DEFAULT 2.5,
+        repetitions INTEGER NOT NULL DEFAULT 0,
+        updated_at TEXT NOT NULL DEFAULT ''
       )
     ''');
   }
@@ -400,6 +430,20 @@ class AppDatabase {
     );
     await _createSyncTombstoneTrigger(
       database,
+      name: 'sync_challenges_delete',
+      table: 'challenges',
+      collection: 'leetcode_problems',
+      idExpression: 'OLD.id',
+    );
+    await _createSyncTombstoneTrigger(
+      database,
+      name: 'sync_diagrams_delete',
+      table: 'diagrams',
+      collection: 'diagrams',
+      idExpression: 'OLD.id',
+    );
+    await _createSyncTombstoneTrigger(
+      database,
       name: 'sync_study_tracks_delete',
       table: 'study_tracks',
       collection: 'study_roadmaps',
@@ -420,6 +464,55 @@ class AppDatabase {
       idExpression:
           "OLD.node_id || ':' || OLD.material_id || ':' || OLD.material_type",
     );
+  }
+
+  static Future<void> _createChallengeTable(Database database) async {
+    await database.execute('''
+      CREATE TABLE IF NOT EXISTS challenges (
+        id TEXT PRIMARY KEY,
+        problem_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        variant_name TEXT NOT NULL DEFAULT '',
+        strategy TEXT NOT NULL DEFAULT '',
+        url TEXT NOT NULL DEFAULT '',
+        difficulty TEXT NOT NULL,
+        tags TEXT NOT NULL DEFAULT '[]',
+        complexity TEXT NOT NULL DEFAULT '',
+        time_complexity TEXT NOT NULL DEFAULT '',
+        space_complexity TEXT NOT NULL DEFAULT '',
+        tradeoffs TEXT NOT NULL DEFAULT '',
+        diagram_ids TEXT NOT NULL DEFAULT '[]',
+        solution TEXT NOT NULL DEFAULT '',
+        notes TEXT NOT NULL DEFAULT '',
+        solved_at TEXT,
+        due_at TEXT,
+        interval INTEGER NOT NULL DEFAULT 0,
+        ease_factor REAL NOT NULL DEFAULT 2.5,
+        repetitions INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
+    await database.execute(
+      'CREATE INDEX IF NOT EXISTS challenges_due_index ON challenges(due_at)',
+    );
+  }
+
+  static Future<void> _createDiagramTable(Database database) async {
+    await database.execute('''
+      CREATE TABLE IF NOT EXISTS diagrams (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        description TEXT,
+        nodes TEXT NOT NULL DEFAULT '[]',
+        edges TEXT NOT NULL DEFAULT '[]',
+        phase_ids TEXT NOT NULL DEFAULT '[]',
+        flashcard_ids TEXT NOT NULL DEFAULT '[]',
+        problem_ids TEXT NOT NULL DEFAULT '[]',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
   }
 
   static Future<void> _createSyncTombstoneTrigger(
