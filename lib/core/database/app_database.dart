@@ -12,7 +12,7 @@ class AppDatabase {
         path.join(await getDatabasesPath(), 'dunots.db');
     final database = await openDatabase(
       databasePath,
-      version: 3,
+      version: 5,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
       },
@@ -47,6 +47,8 @@ class AppDatabase {
         await database.execute(
           'CREATE INDEX study_nodes_parent_index ON study_nodes(parent_id)',
         );
+        await _createMaterialLinksTable(database);
+        await _createFlashcardsTable(database);
       },
       onUpgrade: (database, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -62,6 +64,12 @@ class AppDatabase {
             'ALTER TABLE study_nodes ADD COLUMN priority INTEGER NOT NULL DEFAULT 0',
           );
         }
+        if (oldVersion < 4) {
+          await _createMaterialLinksTable(database);
+        }
+        if (oldVersion < 5) {
+          await _createFlashcardsTable(database);
+        }
       },
     );
 
@@ -69,4 +77,27 @@ class AppDatabase {
   }
 
   Future<void> close() => database.close();
+
+  static Future<void> _createMaterialLinksTable(Database database) async {
+    await database.execute('''
+      CREATE TABLE IF NOT EXISTS study_node_materials (
+        node_id TEXT NOT NULL,
+        material_id TEXT NOT NULL,
+        material_type TEXT NOT NULL,
+        PRIMARY KEY (node_id, material_id, material_type),
+        FOREIGN KEY (node_id) REFERENCES study_nodes(id) ON DELETE CASCADE
+      )
+    ''');
+  }
+
+  static Future<void> _createFlashcardsTable(Database database) async {
+    await database.execute('''
+      CREATE TABLE IF NOT EXISTS flashcards (
+        id TEXT PRIMARY KEY,
+        front TEXT NOT NULL,
+        back TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      )
+    ''');
+  }
 }
