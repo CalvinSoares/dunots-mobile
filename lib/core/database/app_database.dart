@@ -12,7 +12,7 @@ class AppDatabase {
         path.join(await getDatabasesPath(), 'dunots.db');
     final database = await openDatabase(
       databasePath,
-      version: 5,
+      version: 15,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
       },
@@ -49,6 +49,9 @@ class AppDatabase {
         );
         await _createMaterialLinksTable(database);
         await _createFlashcardsTable(database);
+        await _createFlashcardSessionsTable(database);
+        await _createQuestionsTable(database);
+        await _createQuizAttemptsTable(database);
       },
       onUpgrade: (database, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -69,6 +72,65 @@ class AppDatabase {
         }
         if (oldVersion < 5) {
           await _createFlashcardsTable(database);
+        }
+        if (oldVersion < 6) {
+          await _createQuestionsTable(database);
+        }
+        if (oldVersion < 7) {
+          await _createQuizAttemptsTable(database);
+        }
+        if (oldVersion < 8) {
+          await database.execute(
+            "ALTER TABLE questions ADD COLUMN topic TEXT NOT NULL DEFAULT ''",
+          );
+        }
+        if (oldVersion < 9) {
+          await database.execute(
+            "ALTER TABLE questions ADD COLUMN exam TEXT NOT NULL DEFAULT ''",
+          );
+        }
+        if (oldVersion < 10) {
+          await database.execute(
+            "ALTER TABLE quiz_attempts ADD COLUMN review_question_ids TEXT NOT NULL DEFAULT '[]'",
+          );
+        }
+        if (oldVersion < 11) {
+          await database.execute(
+            "ALTER TABLE quiz_attempts ADD COLUMN review_notes TEXT NOT NULL DEFAULT '{}'",
+          );
+        }
+        if (oldVersion < 12) {
+          await database.execute(
+            "ALTER TABLE flashcards ADD COLUMN due_at TEXT NOT NULL DEFAULT ''",
+          );
+          await database.execute(
+            'ALTER TABLE flashcards ADD COLUMN last_reviewed_at TEXT',
+          );
+          await database.execute(
+            'ALTER TABLE flashcards ADD COLUMN review_count INTEGER NOT NULL DEFAULT 0',
+          );
+          await database.execute(
+            "ALTER TABLE flashcards ADD COLUMN last_rating TEXT",
+          );
+          await database.execute(
+            "UPDATE flashcards SET due_at = created_at WHERE due_at = ''",
+          );
+        }
+        if (oldVersion < 13) {
+          await database.execute(
+            "ALTER TABLE flashcards ADD COLUMN code TEXT NOT NULL DEFAULT ''",
+          );
+          await database.execute(
+            "ALTER TABLE flashcards ADD COLUMN tags TEXT NOT NULL DEFAULT '[]'",
+          );
+        }
+        if (oldVersion < 14) {
+          await database.execute(
+            "ALTER TABLE flashcards ADD COLUMN linked_material_ids TEXT NOT NULL DEFAULT '[]'",
+          );
+        }
+        if (oldVersion < 15) {
+          await _createFlashcardSessionsTable(database);
         }
       },
     );
@@ -96,8 +158,76 @@ class AppDatabase {
         id TEXT PRIMARY KEY,
         front TEXT NOT NULL,
         back TEXT NOT NULL,
+        code TEXT NOT NULL DEFAULT '',
+        tags TEXT NOT NULL DEFAULT '[]',
+        linked_material_ids TEXT NOT NULL DEFAULT '[]',
+        created_at TEXT NOT NULL,
+        due_at TEXT NOT NULL,
+        last_reviewed_at TEXT,
+        review_count INTEGER NOT NULL DEFAULT 0,
+        last_rating TEXT
+      )
+    ''');
+  }
+
+  static Future<void> _createFlashcardSessionsTable(Database database) async {
+    await database.execute('''
+      CREATE TABLE IF NOT EXISTS flashcard_sessions (
+        id TEXT PRIMARY KEY,
+        started_at TEXT NOT NULL,
+        finished_at TEXT NOT NULL,
+        card_count INTEGER NOT NULL,
+        difficult_count INTEGER NOT NULL DEFAULT 0,
+        good_count INTEGER NOT NULL DEFAULT 0,
+        easy_count INTEGER NOT NULL DEFAULT 0
+      )
+    ''');
+    await database.execute(
+      'CREATE INDEX IF NOT EXISTS flashcard_sessions_finished_index '
+      'ON flashcard_sessions(finished_at)',
+    );
+  }
+
+  static Future<void> _createQuestionsTable(Database database) async {
+    await database.execute('''
+      CREATE TABLE IF NOT EXISTS questions (
+        id TEXT PRIMARY KEY,
+        question_number INTEGER,
+        statement TEXT NOT NULL,
+        alternatives TEXT NOT NULL,
+        correct_alternative_index INTEGER NOT NULL,
+        explanation TEXT NOT NULL,
+        contest TEXT NOT NULL,
+        role TEXT NOT NULL,
+        topic TEXT NOT NULL DEFAULT '',
+        exam TEXT NOT NULL DEFAULT '',
         created_at TEXT NOT NULL
       )
     ''');
+    await database.execute(
+      'CREATE INDEX IF NOT EXISTS questions_number_index '
+      'ON questions(question_number)',
+    );
+  }
+
+  static Future<void> _createQuizAttemptsTable(Database database) async {
+    await database.execute('''
+      CREATE TABLE IF NOT EXISTS quiz_attempts (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        question_ids TEXT NOT NULL,
+        current_index INTEGER NOT NULL DEFAULT 0,
+        status TEXT NOT NULL,
+        answers TEXT NOT NULL,
+        review_question_ids TEXT NOT NULL DEFAULT '[]',
+        review_notes TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
+    await database.execute(
+      'CREATE INDEX IF NOT EXISTS quiz_attempts_status_index '
+      'ON quiz_attempts(status)',
+    );
   }
 }
