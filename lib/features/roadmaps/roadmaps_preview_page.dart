@@ -40,10 +40,125 @@ class _RoadmapsPreviewPageState extends State<RoadmapsPreviewPage> {
           icon: Icons.route_outlined,
           title: 'Trilhas de estudo',
           subtitle: 'Organize tópicos, subtópicos e materiais.',
-          child: _buildContent(context),
+          child: Column(
+            children: [
+              Align(
+                alignment: Alignment.centerRight,
+                child: FilledButton.icon(
+                  onPressed: () => _showCreateTrackDialog(context),
+                  icon: const Icon(Icons.add),
+                  label: const Text('Nova trilha'),
+                ),
+              ),
+              const SizedBox(height: 16),
+              _buildContent(context),
+            ],
+          ),
         );
       },
     );
+  }
+
+  Future<void> _showCreateTrackDialog(BuildContext context) async {
+    final titleController = TextEditingController();
+    final descriptionController = TextEditingController();
+
+    final data = await showDialog<_NewTrackData>(
+      context: context,
+      builder: (dialogContext) {
+        String? validationError;
+
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Nova trilha'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: titleController,
+                      autofocus: true,
+                      textInputAction: TextInputAction.next,
+                      decoration: const InputDecoration(
+                        labelText: 'Título',
+                        hintText: 'Ex.: Análise de Sistemas',
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: descriptionController,
+                      maxLines: 3,
+                      decoration: const InputDecoration(
+                        labelText: 'Descrição (opcional)',
+                        hintText: 'Explique o objetivo desta trilha',
+                      ),
+                    ),
+                    if (validationError != null) ...[
+                      const SizedBox(height: 12),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          validationError!,
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.error,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: const Text('Cancelar'),
+                ),
+                FilledButton(
+                  onPressed: () {
+                    if (titleController.text.trim().isEmpty) {
+                      setDialogState(() {
+                        validationError = 'Informe um título para a trilha.';
+                      });
+                      return;
+                    }
+
+                    Navigator.of(dialogContext).pop(
+                      _NewTrackData(
+                        title: titleController.text,
+                        description: descriptionController.text,
+                      ),
+                    );
+                  },
+                  child: const Text('Criar'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    titleController.dispose();
+    descriptionController.dispose();
+
+    if (data == null || !mounted) {
+      return;
+    }
+
+    try {
+      await _controller.createTrack(
+        title: data.title,
+        description: data.description,
+      );
+    } on ArgumentError catch (error) {
+      if (!context.mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error.message.toString())));
+    }
   }
 
   Widget _buildContent(BuildContext context) {
@@ -92,4 +207,11 @@ class _RoadmapsPreviewPageState extends State<RoadmapsPreviewPage> {
         );
     }
   }
+}
+
+class _NewTrackData {
+  final String title;
+  final String description;
+
+  const _NewTrackData({required this.title, required this.description});
 }
