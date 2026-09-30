@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dunots.app/contracts/sync/v1.json",
+  "title": "Dunots sync package v1",
+  "description": "Formato de transporte entre desktop/web e clientes Dunots.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "version", "exportedAt", "source", "collections"],
+  "properties": {
+    "format": { "const": "dunots-sync" },
+    "version": { "const": 1 },
+    "exportedAt": { "type": "string", "format": "date-time" },
+    "source": { "$ref": "#/$defs/identity" },
+    "collections": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "flashcards",
+        "leetcode_problems",
+        "articles",
+        "snippets",
+        "study_phases",
+        "diagrams",
+        "quiz_exams",
+        "quiz_questions",
+        "quiz_attempts",
+        "study_roadmaps",
+        "roadmap_nodes",
+        "roadmap_links",
+        "sync_tombstones"
+      ],
+      "properties": {
+        "flashcards": { "$ref": "#/$defs/records" },
+        "leetcode_problems": { "$ref": "#/$defs/records" },
+        "articles": { "$ref": "#/$defs/records" },
+        "snippets": { "$ref": "#/$defs/records" },
+        "study_phases": { "$ref": "#/$defs/records" },
+        "diagrams": { "$ref": "#/$defs/records" },
+        "quiz_exams": { "$ref": "#/$defs/records" },
+        "quiz_questions": { "$ref": "#/$defs/records" },
+        "quiz_attempts": { "$ref": "#/$defs/records" },
+        "study_roadmaps": { "$ref": "#/$defs/records" },
+        "roadmap_nodes": { "$ref": "#/$defs/records" },
+        "roadmap_links": { "$ref": "#/$defs/records" },
+        "sync_tombstones": { "$ref": "#/$defs/records" }
+      }
+    }
+  },
+  "$defs": {
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["deviceId", "deviceName"],
+      "properties": {
+        "deviceId": { "type": "string", "minLength": 1 },
+        "deviceName": { "type": "string", "minLength": 1 }
+      }
+    },
+    "record": {
+      "type": "object",
+      "required": ["id"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "deletedAt": { "type": "string", "format": "date-time" },
+        "collection": { "type": "string" },
+        "recordId": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "records": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/record" }
+    }
+  }
+}

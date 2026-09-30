@@ -71,6 +71,8 @@ class SyncDatabaseRepository {
 
   static const supportedCollections = <String>{
     SyncCollections.flashcards,
+    SyncCollections.leetcodeProblems,
+    SyncCollections.diagrams,
     SyncCollections.quizExams,
     SyncCollections.quizQuestions,
     SyncCollections.quizAttempts,
@@ -299,6 +301,12 @@ class SyncDatabaseRepository {
     collections[SyncCollections.flashcards] = (await database.query(
       'flashcards',
     )).map(_flashcardRecord).toList(growable: false);
+    collections[SyncCollections.leetcodeProblems] = (await database.query(
+      'challenges',
+    )).map(_challengeRecord).toList(growable: false);
+    collections[SyncCollections.diagrams] = (await database.query('diagrams'))
+        .map(_diagramRecord)
+        .toList(growable: false);
     collections[SyncCollections.quizExams] = (await database.query(
       'quiz_exams',
     )).map(_examRecord).toList(growable: false);
@@ -332,12 +340,61 @@ class SyncDatabaseRepository {
       'code': _string(row['code']),
       'tags': _decodeList(row['tags']),
       'linkedMaterialIds': _decodeList(row['linked_material_ids']),
+      'diagramIds': _decodeList(row['diagram_ids']),
       'createdAt': createdAt,
       'dueAt': _string(row['due_at']),
       'lastReviewedAt': _optionalString(row['last_reviewed_at']),
       'reviewCount': row['review_count'] ?? 0,
       'lastRating': _optionalString(row['last_rating']),
-      'updatedAt': _optionalString(row['last_reviewed_at']) ?? createdAt,
+      'interval': row['interval'] ?? 0,
+      'easeFactor': row['ease_factor'] ?? 2.5,
+      'repetitions': row['repetitions'] ?? 0,
+      'updatedAt':
+          _optionalString(row['updated_at']) ??
+          _optionalString(row['last_reviewed_at']) ??
+          createdAt,
+    });
+  }
+
+  SyncRecord _challengeRecord(Map<String, Object?> row) {
+    return SyncRecord({
+      'id': _string(row['id']),
+      'problemId': _string(row['problem_id']),
+      'title': _string(row['title']),
+      'variantName': _string(row['variant_name']),
+      'strategy': _string(row['strategy']),
+      'url': _string(row['url']),
+      'difficulty': _string(row['difficulty']),
+      'tags': _decodeList(row['tags']),
+      'complexity': _string(row['complexity']),
+      'timeComplexity': _string(row['time_complexity']),
+      'spaceComplexity': _string(row['space_complexity']),
+      'tradeoffs': _string(row['tradeoffs']),
+      'diagramIds': _decodeList(row['diagram_ids']),
+      'solution': _string(row['solution']),
+      'notes': _string(row['notes']),
+      'solvedAt': _optionalString(row['solved_at']),
+      'dueAt': _optionalString(row['due_at']),
+      'interval': row['interval'] ?? 0,
+      'easeFactor': row['ease_factor'] ?? 2.5,
+      'repetitions': row['repetitions'] ?? 0,
+      'createdAt': _string(row['created_at']),
+      'updatedAt': _string(row['updated_at']),
+    });
+  }
+
+  SyncRecord _diagramRecord(Map<String, Object?> row) {
+    return SyncRecord({
+      'id': _string(row['id']),
+      'title': _string(row['title']),
+      'description': row['description'],
+      'nodes': _decodeList(row['nodes']),
+      'edges': _decodeList(row['edges']),
+      'phaseIds': _decodeList(row['phase_ids']),
+      'flashcardIds': _decodeList(row['flashcard_ids']),
+      'problemIds': _decodeList(row['problem_ids']),
+      'createdAt': _string(row['created_at']),
+      'updatedAt': _string(row['updated_at']),
     });
   }
 
@@ -471,11 +528,56 @@ class SyncDatabaseRepository {
           'code': _string(values['code']),
           'tags': jsonEncode(_list(values['tags'])),
           'linked_material_ids': jsonEncode(_list(values['linkedMaterialIds'])),
+          'diagram_ids': jsonEncode(_list(values['diagramIds'])),
           'created_at': _string(values['createdAt']),
           'due_at': _string(values['dueAt']),
           'last_reviewed_at': values['lastReviewedAt'],
           'review_count': values['reviewCount'] ?? 0,
           'last_rating': values['lastRating'],
+          'interval': values['interval'] ?? 0,
+          'ease_factor': values['easeFactor'] ?? 2.5,
+          'repetitions': values['repetitions'] ?? 0,
+          'updated_at': _string(values['updatedAt']),
+        }, conflictAlgorithm: ConflictAlgorithm.replace);
+        return;
+      case SyncCollections.leetcodeProblems:
+        await executor.insert('challenges', {
+          'id': record.id,
+          'problem_id': _string(values['problemId']),
+          'title': _string(values['title']),
+          'variant_name': _string(values['variantName']),
+          'strategy': _string(values['strategy']),
+          'url': _string(values['url']),
+          'difficulty': _string(values['difficulty']),
+          'tags': jsonEncode(_list(values['tags'])),
+          'complexity': _string(values['complexity']),
+          'time_complexity': _string(values['timeComplexity']),
+          'space_complexity': _string(values['spaceComplexity']),
+          'tradeoffs': _string(values['tradeoffs']),
+          'diagram_ids': jsonEncode(_list(values['diagramIds'])),
+          'solution': _string(values['solution']),
+          'notes': _string(values['notes']),
+          'solved_at': values['solvedAt'],
+          'due_at': values['dueAt'],
+          'interval': values['interval'] ?? 0,
+          'ease_factor': values['easeFactor'] ?? 2.5,
+          'repetitions': values['repetitions'] ?? 0,
+          'created_at': _string(values['createdAt']),
+          'updated_at': _string(values['updatedAt']),
+        }, conflictAlgorithm: ConflictAlgorithm.replace);
+        return;
+      case SyncCollections.diagrams:
+        await executor.insert('diagrams', {
+          'id': record.id,
+          'title': _string(values['title']),
+          'description': values['description'],
+          'nodes': jsonEncode(_list(values['nodes'])),
+          'edges': jsonEncode(_list(values['edges'])),
+          'phase_ids': jsonEncode(_list(values['phaseIds'])),
+          'flashcard_ids': jsonEncode(_list(values['flashcardIds'])),
+          'problem_ids': jsonEncode(_list(values['problemIds'])),
+          'created_at': _string(values['createdAt']),
+          'updated_at': _string(values['updatedAt']),
         }, conflictAlgorithm: ConflictAlgorithm.replace);
         return;
       case SyncCollections.quizExams:
@@ -580,6 +682,12 @@ class SyncDatabaseRepository {
     switch (collection) {
       case SyncCollections.flashcards:
         await executor.delete('flashcards', where: 'id = ?', whereArgs: [id]);
+        break;
+      case SyncCollections.leetcodeProblems:
+        await executor.delete('challenges', where: 'id = ?', whereArgs: [id]);
+        break;
+      case SyncCollections.diagrams:
+        await executor.delete('diagrams', where: 'id = ?', whereArgs: [id]);
         break;
       case SyncCollections.quizExams:
         await executor.delete('quiz_exams', where: 'id = ?', whereArgs: [id]);
