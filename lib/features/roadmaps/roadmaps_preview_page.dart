@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../../shared/widgets/study_widgets.dart';
 import 'data/study_track_repository.dart';
+import 'domain/study_track.dart';
 import 'presentation/study_tracks_controller.dart';
+import 'presentation/study_track_list_item.dart';
 
 class RoadmapsPreviewPage extends StatefulWidget {
   final StudyTrackRepository? repository;
@@ -60,87 +62,13 @@ class _RoadmapsPreviewPageState extends State<RoadmapsPreviewPage> {
   }
 
   Future<void> _showCreateTrackDialog(BuildContext context) async {
-    final titleController = TextEditingController();
-    final descriptionController = TextEditingController();
-
-    final data = await showDialog<_NewTrackData>(
+    final data = await showDialog<_TrackFormData>(
       context: context,
-      builder: (dialogContext) {
-        String? validationError;
-
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              title: const Text('Nova trilha'),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextField(
-                      controller: titleController,
-                      autofocus: true,
-                      textInputAction: TextInputAction.next,
-                      decoration: const InputDecoration(
-                        labelText: 'Título',
-                        hintText: 'Ex.: Análise de Sistemas',
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: descriptionController,
-                      maxLines: 3,
-                      decoration: const InputDecoration(
-                        labelText: 'Descrição (opcional)',
-                        hintText: 'Explique o objetivo desta trilha',
-                      ),
-                    ),
-                    if (validationError != null) ...[
-                      const SizedBox(height: 12),
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: Text(
-                          validationError!,
-                          style: TextStyle(
-                            color: Theme.of(context).colorScheme.error,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(),
-                  child: const Text('Cancelar'),
-                ),
-                FilledButton(
-                  onPressed: () {
-                    if (titleController.text.trim().isEmpty) {
-                      setDialogState(() {
-                        validationError = 'Informe um título para a trilha.';
-                      });
-                      return;
-                    }
-
-                    Navigator.of(dialogContext).pop(
-                      _NewTrackData(
-                        title: titleController.text,
-                        description: descriptionController.text,
-                      ),
-                    );
-                  },
-                  child: const Text('Criar'),
-                ),
-              ],
-            );
-          },
-        );
-      },
+      builder: (_) => const _TrackFormDialog(
+        dialogTitle: 'Nova trilha',
+        actionLabel: 'Criar',
+      ),
     );
-
-    titleController.dispose();
-    descriptionController.dispose();
 
     if (data == null || !mounted) {
       return;
@@ -159,6 +87,71 @@ class _RoadmapsPreviewPageState extends State<RoadmapsPreviewPage> {
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(error.message.toString())));
     }
+  }
+
+  Future<void> _showEditTrackDialog(
+    BuildContext context,
+    StudyTrack track,
+  ) async {
+    final data = await showDialog<_TrackFormData>(
+      context: context,
+      builder: (_) => _TrackFormDialog(
+        dialogTitle: 'Editar trilha',
+        actionLabel: 'Salvar',
+        initialTitle: track.title,
+        initialDescription: track.description,
+      ),
+    );
+
+    if (data == null || !mounted) {
+      return;
+    }
+
+    try {
+      await _controller.updateTrack(
+        track: track,
+        title: data.title,
+        description: data.description,
+      );
+    } on ArgumentError catch (error) {
+      if (!context.mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error.message.toString())));
+    }
+  }
+
+  Future<void> _confirmDeleteTrack(
+    BuildContext context,
+    StudyTrack track,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Excluir trilha?'),
+          content: Text('A trilha "${track.title}" será removida desta lista.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Excluir'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true || !mounted) {
+      return;
+    }
+
+    await _controller.deleteTrack(track.id);
   }
 
   Widget _buildContent(BuildContext context) {
@@ -198,9 +191,10 @@ class _RoadmapsPreviewPageState extends State<RoadmapsPreviewPage> {
           children: state.tracks.map((track) {
             return Padding(
               padding: const EdgeInsets.only(bottom: 10),
-              child: ExampleListTile(
-                title: track.title,
-                detail: track.progressLabel,
+              child: StudyTrackListItem(
+                track: track,
+                onEdit: () => _showEditTrackDialog(context, track),
+                onDelete: () => _confirmDeleteTrack(context, track),
               ),
             );
           }).toList(),
@@ -209,9 +203,113 @@ class _RoadmapsPreviewPageState extends State<RoadmapsPreviewPage> {
   }
 }
 
-class _NewTrackData {
+class _TrackFormData {
   final String title;
   final String description;
 
-  const _NewTrackData({required this.title, required this.description});
+  const _TrackFormData({required this.title, required this.description});
+}
+
+class _TrackFormDialog extends StatefulWidget {
+  final String dialogTitle;
+  final String actionLabel;
+  final String initialTitle;
+  final String initialDescription;
+
+  const _TrackFormDialog({
+    required this.dialogTitle,
+    required this.actionLabel,
+    this.initialTitle = '',
+    this.initialDescription = '',
+  });
+
+  @override
+  State<_TrackFormDialog> createState() => _TrackFormDialogState();
+}
+
+class _TrackFormDialogState extends State<_TrackFormDialog> {
+  late final TextEditingController titleController;
+  late final TextEditingController descriptionController;
+  String? validationError;
+
+  @override
+  void initState() {
+    super.initState();
+    titleController = TextEditingController(text: widget.initialTitle);
+    descriptionController = TextEditingController(
+      text: widget.initialDescription,
+    );
+  }
+
+  @override
+  void dispose() {
+    titleController.dispose();
+    descriptionController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.dialogTitle),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: titleController,
+              autofocus: true,
+              textInputAction: TextInputAction.next,
+              decoration: const InputDecoration(
+                labelText: 'Título',
+                hintText: 'Ex.: Análise de Sistemas',
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: descriptionController,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                labelText: 'Descrição (opcional)',
+                hintText: 'Explique o objetivo desta trilha',
+              ),
+            ),
+            if (validationError != null) ...[
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  validationError!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton(onPressed: _submit, child: Text(widget.actionLabel)),
+      ],
+    );
+  }
+
+  void _submit() {
+    if (titleController.text.trim().isEmpty) {
+      setState(() {
+        validationError = 'Informe um título para a trilha.';
+      });
+      return;
+    }
+
+    Navigator.of(context).pop(
+      _TrackFormData(
+        title: titleController.text,
+        description: descriptionController.text,
+      ),
+    );
+  }
 }
