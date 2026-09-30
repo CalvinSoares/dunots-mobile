@@ -1,14 +1,24 @@
 import 'package:flutter/material.dart';
 
+import '../features/flashcards/data/flashcard_repository.dart';
 import '../features/roadmaps/data/study_node_repository.dart';
+import '../features/roadmaps/data/study_material_repository.dart';
 import '../features/roadmaps/data/study_track_repository.dart';
 import 'dunots_home_shell.dart';
 
 class DunotsMobileApp extends StatelessWidget {
   final StudyTrackRepository? trackRepository;
   final StudyNodeRepository? nodeRepository;
+  final StudyNodeMaterialRepository? materialLinkRepository;
+  final FlashcardRepository? flashcardRepository;
 
-  const DunotsMobileApp({super.key, this.trackRepository, this.nodeRepository});
+  const DunotsMobileApp({
+    super.key,
+    this.trackRepository,
+    this.nodeRepository,
+    this.materialLinkRepository,
+    this.flashcardRepository,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -56,6 +66,8 @@ class DunotsMobileApp extends StatelessWidget {
       home: DunotsHomeShell(
         trackRepository: trackRepository,
         nodeRepository: nodeRepository,
+        materialLinkRepository: materialLinkRepository,
+        flashcardRepository: flashcardRepository,
       ),
     );
   }

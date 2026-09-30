@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 
+import '../flashcards/data/flashcard_repository.dart';
 import '../../shared/widgets/study_widgets.dart';
+import 'data/flashcard_study_material_repository.dart';
 import 'data/study_node_repository.dart';
+import 'data/study_material_repository.dart';
 import 'data/study_track_repository.dart';
 import 'domain/study_track.dart';
 import 'presentation/study_tracks_controller.dart';
@@ -11,8 +14,16 @@ import 'presentation/study_track_details_page.dart';
 class RoadmapsPreviewPage extends StatefulWidget {
   final StudyTrackRepository? repository;
   final StudyNodeRepository? nodeRepository;
+  final StudyNodeMaterialRepository? materialLinkRepository;
+  final FlashcardRepository? flashcardRepository;
 
-  const RoadmapsPreviewPage({super.key, this.repository, this.nodeRepository});
+  const RoadmapsPreviewPage({
+    super.key,
+    this.repository,
+    this.nodeRepository,
+    this.materialLinkRepository,
+    this.flashcardRepository,
+  });
 
   @override
   State<RoadmapsPreviewPage> createState() => _RoadmapsPreviewPageState();
@@ -21,6 +32,8 @@ class RoadmapsPreviewPage extends StatefulWidget {
 class _RoadmapsPreviewPageState extends State<RoadmapsPreviewPage> {
   late final StudyTracksController _controller;
   late final StudyNodeRepository _nodeRepository;
+  late final StudyNodeMaterialRepository _materialLinkRepository;
+  late final StudyMaterialRepository _materialRepository;
 
   @override
   void initState() {
@@ -29,6 +42,12 @@ class _RoadmapsPreviewPageState extends State<RoadmapsPreviewPage> {
       repository: widget.repository ?? InMemoryStudyTrackRepository(),
     );
     _nodeRepository = widget.nodeRepository ?? InMemoryStudyNodeRepository();
+    _materialLinkRepository =
+        widget.materialLinkRepository ?? InMemoryStudyNodeMaterialRepository();
+    _materialRepository = FlashcardStudyMaterialRepository(
+      flashcardRepository:
+          widget.flashcardRepository ?? InMemoryFlashcardRepository(),
+    );
     _controller.load();
   }
 
@@ -101,6 +120,8 @@ class _RoadmapsPreviewPageState extends State<RoadmapsPreviewPage> {
           track: track,
           repository: _nodeRepository,
           trackRepository: _controller.repository,
+          materialLinkRepository: _materialLinkRepository,
+          materialRepository: _materialRepository,
         ),
       ),
     );
