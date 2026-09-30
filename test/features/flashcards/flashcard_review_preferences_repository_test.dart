@@ -33,6 +33,7 @@ void main() {
     const preferences = FlashcardReviewPreferences(
       dailyLimit: 50,
       dailyGoal: 100,
+      weeklyGoal: 300,
       sort: 'alphabetical',
       preferRecommended: true,
       reminderEnabled: false,
@@ -45,6 +46,7 @@ void main() {
 
     expect(saved.dailyLimit, 50);
     expect(saved.dailyGoal, 100);
+    expect(saved.weeklyGoal, 300);
     expect(saved.sort, 'alphabetical');
     expect(saved.preferRecommended, isTrue);
     expect(saved.reminderEnabled, isFalse);

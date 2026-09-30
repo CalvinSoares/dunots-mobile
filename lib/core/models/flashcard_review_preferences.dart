@@ -1,6 +1,7 @@
 class FlashcardReviewPreferences {
   final int dailyLimit;
   final int dailyGoal;
+  final int weeklyGoal;
   final String sort;
   final bool preferRecommended;
   final bool reminderEnabled;
@@ -10,6 +11,7 @@ class FlashcardReviewPreferences {
   const FlashcardReviewPreferences({
     this.dailyLimit = 20,
     this.dailyGoal = 20,
+    this.weeklyGoal = 100,
     this.sort = 'due',
     this.preferRecommended = false,
     this.reminderEnabled = true,
@@ -20,6 +22,7 @@ class FlashcardReviewPreferences {
   FlashcardReviewPreferences copyWith({
     int? dailyLimit,
     int? dailyGoal,
+    int? weeklyGoal,
     String? sort,
     bool? preferRecommended,
     bool? reminderEnabled,
@@ -29,6 +32,7 @@ class FlashcardReviewPreferences {
     return FlashcardReviewPreferences(
       dailyLimit: dailyLimit ?? this.dailyLimit,
       dailyGoal: dailyGoal ?? this.dailyGoal,
+      weeklyGoal: weeklyGoal ?? this.weeklyGoal,
       sort: sort ?? this.sort,
       preferRecommended: preferRecommended ?? this.preferRecommended,
       reminderEnabled: reminderEnabled ?? this.reminderEnabled,

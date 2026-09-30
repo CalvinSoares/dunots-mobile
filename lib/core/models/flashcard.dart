@@ -5,11 +5,16 @@ class Flashcard {
   final String code;
   final List<String> tags;
   final List<String> linkedMaterialIds;
+  final List<String> diagramIds;
   final DateTime createdAt;
   final DateTime? dueAt;
   final DateTime? lastReviewedAt;
   final int reviewCount;
   final String? lastRating;
+  final int interval;
+  final double easeFactor;
+  final int repetitions;
+  final DateTime updatedAt;
 
   const Flashcard({
     required this.id,
@@ -18,12 +23,17 @@ class Flashcard {
     this.code = '',
     this.tags = const [],
     this.linkedMaterialIds = const [],
+    this.diagramIds = const [],
     required this.createdAt,
     this.dueAt,
     this.lastReviewedAt,
     this.reviewCount = 0,
     this.lastRating,
-  });
+    this.interval = 0,
+    this.easeFactor = 2.5,
+    this.repetitions = 0,
+    DateTime? updatedAt,
+  }) : updatedAt = updatedAt ?? createdAt;
 
   Flashcard copyWith({
     String? id,
@@ -32,11 +42,16 @@ class Flashcard {
     String? code,
     List<String>? tags,
     List<String>? linkedMaterialIds,
+    List<String>? diagramIds,
     DateTime? createdAt,
     DateTime? dueAt,
     DateTime? lastReviewedAt,
     int? reviewCount,
     String? lastRating,
+    int? interval,
+    double? easeFactor,
+    int? repetitions,
+    DateTime? updatedAt,
   }) {
     return Flashcard(
       id: id ?? this.id,
@@ -45,11 +60,16 @@ class Flashcard {
       code: code ?? this.code,
       tags: tags ?? this.tags,
       linkedMaterialIds: linkedMaterialIds ?? this.linkedMaterialIds,
+      diagramIds: diagramIds ?? this.diagramIds,
       createdAt: createdAt ?? this.createdAt,
       dueAt: dueAt ?? this.dueAt,
       lastReviewedAt: lastReviewedAt ?? this.lastReviewedAt,
       reviewCount: reviewCount ?? this.reviewCount,
       lastRating: lastRating ?? this.lastRating,
+      interval: interval ?? this.interval,
+      easeFactor: easeFactor ?? this.easeFactor,
+      repetitions: repetitions ?? this.repetitions,
+      updatedAt: updatedAt ?? this.updatedAt,
     );
   }
 

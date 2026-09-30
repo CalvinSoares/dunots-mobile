@@ -28,6 +28,7 @@ class SqliteFlashcardReviewPreferencesRepository
     return FlashcardReviewPreferences(
       dailyLimit: row['daily_limit']! as int,
       dailyGoal: row['daily_goal']! as int,
+      weeklyGoal: row['weekly_goal']! as int,
       sort: row['sort']! as String,
       preferRecommended: (row['prefer_recommended']! as int) == 1,
       reminderEnabled: (row['reminder_enabled']! as int) == 1,
@@ -42,6 +43,7 @@ class SqliteFlashcardReviewPreferencesRepository
       'id': 1,
       'daily_limit': preferences.dailyLimit,
       'daily_goal': preferences.dailyGoal,
+      'weekly_goal': preferences.weeklyGoal,
       'sort': preferences.sort,
       'prefer_recommended': preferences.preferRecommended ? 1 : 0,
       'reminder_enabled': preferences.reminderEnabled ? 1 : 0,
