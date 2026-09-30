@@ -12,7 +12,7 @@ class AppDatabase {
         path.join(await getDatabasesPath(), 'dunots.db');
     final database = await openDatabase(
       databasePath,
-      version: 15,
+      version: 18,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
       },
@@ -50,6 +50,7 @@ class AppDatabase {
         await _createMaterialLinksTable(database);
         await _createFlashcardsTable(database);
         await _createFlashcardSessionsTable(database);
+        await _createFlashcardReviewPreferencesTable(database);
         await _createQuestionsTable(database);
         await _createQuizAttemptsTable(database);
       },
@@ -132,6 +133,29 @@ class AppDatabase {
         if (oldVersion < 15) {
           await _createFlashcardSessionsTable(database);
         }
+        if (oldVersion < 16) {
+          await _createFlashcardReviewPreferencesTable(database);
+        }
+        if (oldVersion < 17) {
+          await database.execute(
+            'ALTER TABLE flashcard_review_preferences '
+            'ADD COLUMN daily_goal INTEGER NOT NULL DEFAULT 20',
+          );
+        }
+        if (oldVersion < 18) {
+          await database.execute(
+            'ALTER TABLE flashcard_review_preferences '
+            'ADD COLUMN reminder_enabled INTEGER NOT NULL DEFAULT 1',
+          );
+          await database.execute(
+            'ALTER TABLE flashcard_review_preferences '
+            'ADD COLUMN reminder_hour INTEGER NOT NULL DEFAULT 0',
+          );
+          await database.execute(
+            'ALTER TABLE flashcard_review_preferences '
+            'ADD COLUMN reminder_minute INTEGER NOT NULL DEFAULT 0',
+          );
+        }
       },
     );
 
@@ -186,6 +210,23 @@ class AppDatabase {
       'CREATE INDEX IF NOT EXISTS flashcard_sessions_finished_index '
       'ON flashcard_sessions(finished_at)',
     );
+  }
+
+  static Future<void> _createFlashcardReviewPreferencesTable(
+    Database database,
+  ) async {
+    await database.execute('''
+      CREATE TABLE IF NOT EXISTS flashcard_review_preferences (
+        id INTEGER PRIMARY KEY,
+        daily_limit INTEGER NOT NULL DEFAULT 20,
+        daily_goal INTEGER NOT NULL DEFAULT 20,
+        sort TEXT NOT NULL DEFAULT 'due',
+        prefer_recommended INTEGER NOT NULL DEFAULT 0,
+        reminder_enabled INTEGER NOT NULL DEFAULT 1,
+        reminder_hour INTEGER NOT NULL DEFAULT 0,
+        reminder_minute INTEGER NOT NULL DEFAULT 0
+      )
+    ''');
   }
 
   static Future<void> _createQuestionsTable(Database database) async {
