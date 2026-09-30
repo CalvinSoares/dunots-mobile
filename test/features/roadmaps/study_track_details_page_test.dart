@@ -50,6 +50,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Arquiteturas de rede'), findsOneWidget);
+    print('tooltip=${find.byTooltip('Adicionar subtópico').evaluate().length} icon=${find.byIcon(Icons.add_circle_outline).evaluate().length}');
+    await tester.ensureVisible(find.byTooltip('Adicionar subtópico'));
     expect(find.byTooltip('Adicionar subtópico'), findsOneWidget);
 
     await tester.tap(find.byTooltip('Adicionar subtópico'));
@@ -65,6 +67,16 @@ void main() {
     final nodes = await nodeRepository.getForTrack('track-001');
     expect(nodes, hasLength(2));
     expect(nodes.last.parentId, nodes.first.id);
+    expect(find.text('0/2 itens concluídos'), findsOneWidget);
+
+    await tester.ensureVisible(find.byType(Checkbox).first);
+    await tester.tap(find.byType(Checkbox).first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('1/2 itens concluídos'), findsOneWidget);
+    final updatedTrack = (await trackRepository.getAll()).single;
+    expect(updatedTrack.completedItems, 1);
+    expect(updatedTrack.totalItems, 2);
 
     await tester.tap(find.byTooltip('Editar tópico').last);
     await tester.pumpAndSettle();

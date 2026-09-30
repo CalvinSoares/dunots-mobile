@@ -27,6 +27,8 @@ void main() {
         title: 'Arquiteturas de rede',
         description: '',
         parentId: root.id,
+        notes: 'Revisar topologias.',
+        priority: StudyPriority.high,
       );
 
       expect(controller.state.status, StudyNodesStatus.data);
@@ -35,6 +37,8 @@ void main() {
         (node) => node.id != root.id,
       );
       expect(child.parentId, root.id);
+      expect(child.notes, 'Revisar topologias.');
+      expect(child.priority, StudyPriority.high);
     },
   );
 
@@ -48,6 +52,31 @@ void main() {
       () => controller.createNode(title: '  ', description: ''),
       throwsArgumentError,
     );
+  });
+
+  test('alterna a conclusão de um tópico', () async {
+    final controller = StudyNodesController(
+      trackId: 'track-001',
+      repository: InMemoryStudyNodeRepository(
+        nodes: const [
+          StudyNode(
+            id: 'node-001',
+            trackId: 'track-001',
+            parentId: null,
+            title: 'Redes',
+            description: '',
+            sortOrder: 0,
+          ),
+        ],
+      ),
+    );
+
+    await controller.load();
+    expect(controller.state.nodes.single.isCompleted, isFalse);
+
+    await controller.toggleCompletion('node-001');
+
+    expect(controller.state.nodes.single.isCompleted, isTrue);
   });
 
   test('edita, move entre irmãos e exclui uma árvore de tópicos', () async {
@@ -89,6 +118,8 @@ void main() {
       id: 'root-001',
       title: 'Redes de computadores',
       description: 'Fundamentos.',
+      notes: 'Priorizar revisão.',
+      priority: StudyPriority.urgent,
     );
     await controller.moveNode('root-002', direction: -1);
 
@@ -99,6 +130,11 @@ void main() {
       'Segurança',
       'Redes de computadores',
     ]);
+    final updatedRoot = controller.state.nodes.firstWhere(
+      (node) => node.id == 'root-001',
+    );
+    expect(updatedRoot.notes, 'Priorizar revisão.');
+    expect(updatedRoot.priority, StudyPriority.urgent);
 
     await controller.deleteNode('root-001');
     expect(controller.state.nodes, hasLength(1));
