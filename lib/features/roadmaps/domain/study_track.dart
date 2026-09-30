@@ -22,4 +22,19 @@ class StudyTrack {
   }
 
   String get progressLabel => '$completedItems/$totalItems itens concluídos';
+
+  StudyTrack copyWith({
+    String? title,
+    String? description,
+    int? completedItems,
+    int? totalItems,
+  }) {
+    return StudyTrack(
+      id: id,
+      title: title ?? this.title,
+      description: description ?? this.description,
+      completedItems: completedItems ?? this.completedItems,
+      totalItems: totalItems ?? this.totalItems,
+    );
+  }
 }

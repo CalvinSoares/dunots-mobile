@@ -4,6 +4,10 @@ abstract interface class StudyTrackRepository {
   Future<List<StudyTrack>> getAll();
 
   Future<void> create(StudyTrack track);
+
+  Future<void> update(StudyTrack track);
+
+  Future<void> delete(String id);
 }
 
 class InMemoryStudyTrackRepository implements StudyTrackRepository {
@@ -38,5 +42,21 @@ class InMemoryStudyTrackRepository implements StudyTrackRepository {
   @override
   Future<void> create(StudyTrack track) async {
     _tracks.add(track);
+  }
+
+  @override
+  Future<void> update(StudyTrack track) async {
+    final index = _tracks.indexWhere((item) => item.id == track.id);
+
+    if (index == -1) {
+      throw StateError('Trilha não encontrada.');
+    }
+
+    _tracks[index] = track;
+  }
+
+  @override
+  Future<void> delete(String id) async {
+    _tracks.removeWhere((track) => track.id == id);
   }
 }

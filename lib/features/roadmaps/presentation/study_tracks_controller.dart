@@ -86,4 +86,26 @@ class StudyTracksController extends ChangeNotifier {
     await repository.create(track);
     await load();
   }
+
+  Future<void> updateTrack({
+    required StudyTrack track,
+    required String title,
+    required String description,
+  }) async {
+    final normalizedTitle = title.trim();
+
+    if (normalizedTitle.isEmpty) {
+      throw ArgumentError('O título da trilha é obrigatório.');
+    }
+
+    await repository.update(
+      track.copyWith(title: normalizedTitle, description: description.trim()),
+    );
+    await load();
+  }
+
+  Future<void> deleteTrack(String id) async {
+    await repository.delete(id);
+    await load();
+  }
 }
