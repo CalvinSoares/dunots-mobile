@@ -14,6 +14,16 @@ class FailingStudyTrackRepository implements StudyTrackRepository {
   Future<void> create(StudyTrack track) {
     throw StateError('Falha simulada');
   }
+
+  @override
+  Future<void> update(StudyTrack track) {
+    throw StateError('Falha simulada');
+  }
+
+  @override
+  Future<void> delete(String id) {
+    throw StateError('Falha simulada');
+  }
 }
 
 void main() {
@@ -91,6 +101,46 @@ void main() {
       () => controller.createTrack(title: '  ', description: ''),
       throwsArgumentError,
     );
+
+    controller.dispose();
+  });
+
+  test('edita uma trilha existente', () async {
+    final controller = StudyTracksController(
+      repository: InMemoryStudyTrackRepository(),
+    );
+
+    await controller.load();
+    final original = controller.state.tracks.first;
+
+    await controller.updateTrack(
+      track: original,
+      title: 'Análise de Sistemas Atualizada',
+      description: 'Nova descrição.',
+    );
+
+    expect(
+      controller.state.tracks.first.title,
+      'Análise de Sistemas Atualizada',
+    );
+    expect(controller.state.tracks.first.description, 'Nova descrição.');
+    expect(controller.state.tracks.first.id, original.id);
+
+    controller.dispose();
+  });
+
+  test('exclui uma trilha existente', () async {
+    final controller = StudyTracksController(
+      repository: InMemoryStudyTrackRepository(),
+    );
+
+    await controller.load();
+    final id = controller.state.tracks.first.id;
+
+    await controller.deleteTrack(id);
+
+    expect(controller.state.tracks, hasLength(1));
+    expect(controller.state.tracks.any((track) => track.id == id), isFalse);
 
     controller.dispose();
   });
