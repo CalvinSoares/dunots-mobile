@@ -3,8 +3,10 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'package:dunots_mobile/core/database/app_database.dart';
 import 'package:dunots_mobile/features/roadmaps/data/sqlite_study_node_repository.dart';
+import 'package:dunots_mobile/features/roadmaps/data/sqlite_study_node_material_repository.dart';
 import 'package:dunots_mobile/features/roadmaps/data/sqlite_study_track_repository.dart';
 import 'package:dunots_mobile/features/roadmaps/domain/study_node.dart';
+import 'package:dunots_mobile/features/roadmaps/domain/study_material.dart';
 import 'package:dunots_mobile/features/roadmaps/domain/study_track.dart';
 
 void main() {
@@ -19,6 +21,7 @@ void main() {
     );
     final trackRepository = SqliteStudyTrackRepository(appDatabase);
     final nodeRepository = SqliteStudyNodeRepository(appDatabase);
+    final linkRepository = SqliteStudyNodeMaterialRepository(appDatabase);
 
     const track = StudyTrack(
       id: 'track-sqlite',
@@ -58,10 +61,19 @@ void main() {
     expect(savedNodes.first.priority, StudyPriority.high);
     expect(savedNodes.last.isCompleted, isTrue);
 
+    const link = StudyMaterialLink(
+      nodeId: 'node-root',
+      materialId: 'card-001',
+      materialType: StudyMaterialType.flashcard,
+    );
+    await linkRepository.replaceForNode(root.id, const [link]);
+    expect(await linkRepository.getForNode(root.id), [link]);
+
     await trackRepository.delete(track.id);
 
     expect(await trackRepository.getAll(), isEmpty);
     expect(await nodeRepository.getForTrack(track.id), isEmpty);
+    expect(await linkRepository.getForNode(root.id), isEmpty);
 
     await appDatabase.close();
   });

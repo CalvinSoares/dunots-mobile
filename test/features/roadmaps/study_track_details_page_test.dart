@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:dunots_mobile/features/roadmaps/data/study_node_repository.dart';
+import 'package:dunots_mobile/features/roadmaps/data/study_material_repository.dart';
 import 'package:dunots_mobile/features/roadmaps/data/study_track_repository.dart';
+import 'package:dunots_mobile/features/roadmaps/domain/study_material.dart';
 import 'package:dunots_mobile/features/roadmaps/domain/study_track.dart';
 import 'package:dunots_mobile/features/roadmaps/roadmaps_preview_page.dart';
 
@@ -20,12 +22,14 @@ void main() {
       ],
     );
     final nodeRepository = InMemoryStudyNodeRepository();
+    final linkRepository = InMemoryStudyNodeMaterialRepository();
 
     await tester.pumpWidget(
       MaterialApp(
         home: RoadmapsPreviewPage(
           repository: trackRepository,
           nodeRepository: nodeRepository,
+          materialLinkRepository: linkRepository,
         ),
       ),
     );
@@ -75,6 +79,24 @@ void main() {
     final updatedTrack = (await trackRepository.getAll()).single;
     expect(updatedTrack.completedItems, 1);
     expect(updatedTrack.totalItems, 2);
+
+    await tester.ensureVisible(find.byTooltip('Vincular material').first);
+    await tester.tap(find.byTooltip('Vincular material').first);
+    await tester.pumpAndSettle();
+
+    final materialDialogSearch = find.descendant(
+      of: find.byType(AlertDialog),
+      matching: find.byType(TextField),
+    );
+    await tester.enterText(materialDialogSearch, 'independência');
+    expect(find.text('O que é independência de dados?'), findsOneWidget);
+    await tester.tap(find.text('O que é independência de dados?'));
+    await tester.tap(find.text('Salvar vínculos'));
+    await tester.pumpAndSettle();
+
+    final linkedMaterials = await linkRepository.getForNode(nodes.first.id);
+    expect(linkedMaterials, hasLength(1));
+    expect(linkedMaterials.single.materialType, StudyMaterialType.flashcard);
 
     await tester.tap(find.byTooltip('Editar tópico').last);
     await tester.pumpAndSettle();
