@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../flashcards/data/flashcard_repository.dart';
+import '../questions/data/question_repository.dart';
+import '../quizzes/data/quiz_attempt_repository.dart';
 import '../../shared/widgets/study_widgets.dart';
-import 'data/flashcard_study_material_repository.dart';
+import 'data/study_material_catalog_repository.dart';
 import 'data/study_node_repository.dart';
 import 'data/study_material_repository.dart';
 import 'data/study_track_repository.dart';
@@ -16,6 +18,8 @@ class RoadmapsPreviewPage extends StatefulWidget {
   final StudyNodeRepository? nodeRepository;
   final StudyNodeMaterialRepository? materialLinkRepository;
   final FlashcardRepository? flashcardRepository;
+  final QuestionRepository? questionRepository;
+  final QuizAttemptRepository? attemptRepository;
 
   const RoadmapsPreviewPage({
     super.key,
@@ -23,6 +27,8 @@ class RoadmapsPreviewPage extends StatefulWidget {
     this.nodeRepository,
     this.materialLinkRepository,
     this.flashcardRepository,
+    this.questionRepository,
+    this.attemptRepository,
   });
 
   @override
@@ -44,9 +50,11 @@ class _RoadmapsPreviewPageState extends State<RoadmapsPreviewPage> {
     _nodeRepository = widget.nodeRepository ?? InMemoryStudyNodeRepository();
     _materialLinkRepository =
         widget.materialLinkRepository ?? InMemoryStudyNodeMaterialRepository();
-    _materialRepository = FlashcardStudyMaterialRepository(
+    _materialRepository = StudyMaterialCatalogRepository(
       flashcardRepository:
           widget.flashcardRepository ?? InMemoryFlashcardRepository(),
+      questionRepository:
+          widget.questionRepository ?? InMemoryQuestionRepository(),
     );
     _controller.load();
   }
@@ -122,6 +130,8 @@ class _RoadmapsPreviewPageState extends State<RoadmapsPreviewPage> {
           trackRepository: _controller.repository,
           materialLinkRepository: _materialLinkRepository,
           materialRepository: _materialRepository,
+          questionRepository: widget.questionRepository,
+          attemptRepository: widget.attemptRepository,
         ),
       ),
     );
@@ -202,31 +212,18 @@ class _RoadmapsPreviewPageState extends State<RoadmapsPreviewPage> {
     switch (state.status) {
       case StudyTracksStatus.initial:
       case StudyTracksStatus.loading:
-        return const Center(
-          child: Padding(
-            padding: EdgeInsets.all(24),
-            child: CircularProgressIndicator(),
-          ),
-        );
+        return const StudyLoadingState(message: 'Carregando trilhas...');
       case StudyTracksStatus.empty:
-        return const Center(
-          child: Padding(
-            padding: EdgeInsets.all(24),
-            child: Text('Nenhuma trilha cadastrada ainda.'),
-          ),
+        return const StudyEmptyState(
+          title: 'Nenhuma trilha cadastrada ainda.',
+          detail: 'Crie uma trilha para organizar seus estudos.',
+          icon: Icons.route_outlined,
         );
       case StudyTracksStatus.error:
-        return Center(
-          child: Column(
-            children: [
-              Text(state.errorMessage ?? 'Ocorreu um erro.'),
-              const SizedBox(height: 12),
-              OutlinedButton(
-                onPressed: _controller.load,
-                child: const Text('Tentar novamente'),
-              ),
-            ],
-          ),
+        return StudyErrorState(
+          message:
+              state.errorMessage ?? 'Ocorreu um erro ao carregar as trilhas.',
+          onRetry: _controller.load,
         );
       case StudyTracksStatus.data:
         return Column(

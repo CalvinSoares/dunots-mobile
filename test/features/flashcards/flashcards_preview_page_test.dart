@@ -59,7 +59,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Todos (4)'), findsOneWidget);
+    expect(find.text('Todos os cards (4)'), findsOneWidget);
     expect(find.text('Vencidos (3)'), findsOneWidget);
     expect(find.text('Novos (1)'), findsOneWidget);
     expect(find.text('Difíceis (1)'), findsOneWidget);
@@ -67,6 +67,20 @@ void main() {
     expect(find.text('3 pendentes hoje · 3 já revisados'), findsOneWidget);
     expect(find.text('Recomendação de revisão'), findsOneWidget);
     expect(find.text('Tema para priorizar: redes.'), findsOneWidget);
+
+    final recommendedButton = find.widgetWithText(
+      FilledButton,
+      'Iniciar recomendada',
+    );
+    await tester.ensureVisible(recommendedButton);
+    await tester.tap(recommendedButton);
+    await tester.pumpAndSettle();
+    expect(find.text('Montar revisão recomendada'), findsOneWidget);
+    expect(find.text('4 cards disponíveis · 1 classificados como difíceis.'),
+        findsOneWidget);
+    expect(find.text('Todos (4)'), findsOneWidget);
+    await tester.tap(find.text('Cancelar'));
+    await tester.pumpAndSettle();
 
     final searchField = find.byType(TextField);
     await tester.enterText(searchField, 'futuro');

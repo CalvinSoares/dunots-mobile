@@ -151,7 +151,7 @@ class _FlashcardsPreviewPageState extends State<FlashcardsPreviewPage> {
                 },
               ),
               const SizedBox(height: 12),
-              _buildRecommendation(difficultCards),
+              _buildRecommendation(difficultCards, dueCards),
               const SizedBox(height: 12),
               TextField(
                 decoration: const InputDecoration(
@@ -378,7 +378,10 @@ class _FlashcardsPreviewPageState extends State<FlashcardsPreviewPage> {
     );
   }
 
-  Widget _buildRecommendation(List<Flashcard> difficultCards) {
+  Widget _buildRecommendation(
+    List<Flashcard> difficultCards,
+    List<Flashcard> dueCards,
+  ) {
     if (difficultCards.isEmpty) return const SizedBox.shrink();
     final tagCounts = <String, int>{};
     for (final card in difficultCards) {
@@ -429,20 +432,71 @@ class _FlashcardsPreviewPageState extends State<FlashcardsPreviewPage> {
               ),
             ],
             const SizedBox(height: 8),
-            OutlinedButton.icon(
-              onPressed: () => setState(() {
-                _filter = 'difficult';
-                _search = '';
-                _selectedTag = '';
-              }),
-              icon: const Icon(Icons.filter_alt_outlined),
-              label: const Text('Ver cards difíceis'),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                FilledButton.icon(
+                  onPressed: () => _openRecommendedSession(
+                    difficultCards: difficultCards,
+                    dueCards: dueCards,
+                  ),
+                  icon: const Icon(Icons.play_arrow_rounded),
+                  label: const Text('Iniciar recomendada'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: () => setState(() {
+                    _filter = 'difficult';
+                    _search = '';
+                    _selectedTag = '';
+                  }),
+                  icon: const Icon(Icons.filter_alt_outlined),
+                  label: const Text('Ver cards difíceis'),
+                ),
+              ],
             ),
           ],
         ),
       ),
     );
   }
+
+  Future<void> _openRecommendedSession({
+    required List<Flashcard> difficultCards,
+    required List<Flashcard> dueCards,
+  }) async {
+    final candidates = <String, Flashcard>{};
+    for (final card in difficultCards) {
+      candidates[card.id] = card;
+    }
+    for (final card in dueCards) {
+      candidates[card.id] = card;
+    }
+    final orderedCards = candidates.values.toList()
+      ..sort((first, second) {
+        final difficultOrder = _difficultyRank(second).compareTo(
+          _difficultyRank(first),
+        );
+        if (difficultOrder != 0) return difficultOrder;
+        return _compareCards(first, second);
+      });
+    if (orderedCards.isEmpty || !mounted) return;
+
+    final limit = await showDialog<int>(
+      context: context,
+      builder: (_) => _RecommendedSessionDialog(
+        availableCount: orderedCards.length,
+        difficultCount: difficultCards.length,
+      ),
+    );
+    if (limit == null || !mounted) return;
+    final cards = orderedCards
+        .take(limit == 0 ? orderedCards.length : limit)
+        .toList(growable: false);
+    await _startStudy(cards);
+  }
+
+  int _difficultyRank(Flashcard card) => card.lastRating == 'difícil' ? 1 : 0;
 
   bool _matchesSearch(Flashcard card) {
     final query = _search.trim().toLowerCase();
@@ -535,5 +589,86 @@ class _FlashcardsPreviewPageState extends State<FlashcardsPreviewPage> {
     return materials
         .where((material) => material.id != excludedMaterialId)
         .toList(growable: false);
+  }
+}
+
+class _RecommendedSessionDialog extends StatefulWidget {
+  final int availableCount;
+  final int difficultCount;
+
+  const _RecommendedSessionDialog({
+    required this.availableCount,
+    required this.difficultCount,
+  });
+
+  @override
+  State<_RecommendedSessionDialog> createState() =>
+      _RecommendedSessionDialogState();
+}
+
+class _RecommendedSessionDialogState
+    extends State<_RecommendedSessionDialog> {
+  late int _selectedCount;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedCount = widget.availableCount >= 10 ? 10 : widget.availableCount;
+  }
+
+  List<int> get _options {
+    final options = <int>{5, 10, 20, widget.availableCount}
+      ..removeWhere((value) => value > widget.availableCount || value <= 0);
+    return options.toList()..sort();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Montar revisão recomendada'),
+      content: SizedBox(
+        width: 420,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${widget.availableCount} cards disponíveis · '
+              '${widget.difficultCount} classificados como difíceis.',
+            ),
+            const SizedBox(height: 14),
+            const Text(
+              'Os cards difíceis aparecem primeiro. Quantos você quer revisar?',
+            ),
+            const SizedBox(height: 8),
+            ..._options.map(
+              (option) => RadioListTile<int>(
+                value: option,
+                groupValue: _selectedCount,
+                contentPadding: EdgeInsets.zero,
+                title: Text(
+                  option == widget.availableCount
+                      ? 'Todos os cards ($option)'
+                      : '$option cards',
+                ),
+                onChanged: (value) {
+                  if (value != null) setState(() => _selectedCount = value);
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(_selectedCount),
+          child: const Text('Iniciar sessão'),
+        ),
+      ],
+    );
   }
 }
