@@ -2,13 +2,15 @@ import '../domain/study_track.dart';
 
 abstract interface class StudyTrackRepository {
   Future<List<StudyTrack>> getAll();
+
+  Future<void> create(StudyTrack track);
 }
 
 class InMemoryStudyTrackRepository implements StudyTrackRepository {
   final List<StudyTrack> _tracks;
 
   InMemoryStudyTrackRepository({List<StudyTrack>? tracks})
-    : _tracks = List.unmodifiable(
+    : _tracks = List.of(
         tracks ??
             const [
               StudyTrack(
@@ -30,6 +32,11 @@ class InMemoryStudyTrackRepository implements StudyTrackRepository {
 
   @override
   Future<List<StudyTrack>> getAll() async {
-    return _tracks;
+    return List.unmodifiable(_tracks);
+  }
+
+  @override
+  Future<void> create(StudyTrack track) async {
+    _tracks.add(track);
   }
 }

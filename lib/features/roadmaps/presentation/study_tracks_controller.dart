@@ -64,4 +64,26 @@ class StudyTracksController extends ChangeNotifier {
 
     notifyListeners();
   }
+
+  Future<void> createTrack({
+    required String title,
+    required String description,
+  }) async {
+    final normalizedTitle = title.trim();
+
+    if (normalizedTitle.isEmpty) {
+      throw ArgumentError('O título da trilha é obrigatório.');
+    }
+
+    final track = StudyTrack(
+      id: 'track-${DateTime.now().microsecondsSinceEpoch}',
+      title: normalizedTitle,
+      description: description.trim(),
+      completedItems: 0,
+      totalItems: 0,
+    );
+
+    await repository.create(track);
+    await load();
+  }
 }
