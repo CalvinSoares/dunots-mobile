@@ -38,28 +38,26 @@ void main() {
 
     await tester.tap(find.text('Novo tópico'));
     await tester.pumpAndSettle();
-    await tester.enterText(
-      find.byType(TextField).at(0),
-      'Arquiteturas de rede',
+    final firstDialogFields = find.descendant(
+      of: find.byType(AlertDialog),
+      matching: find.byType(TextField),
     );
-    await tester.enterText(
-      find.byType(TextField).at(1),
-      'Topologias e modelos.',
-    );
+    await tester.enterText(firstDialogFields.at(0), 'Arquiteturas de rede');
+    await tester.enterText(firstDialogFields.at(1), 'Topologias e modelos.');
     await tester.tap(find.text('Criar'));
     await tester.pumpAndSettle();
 
     expect(find.text('Arquiteturas de rede'), findsOneWidget);
-    print('tooltip=${find.byTooltip('Adicionar subtópico').evaluate().length} icon=${find.byIcon(Icons.add_circle_outline).evaluate().length}');
     await tester.ensureVisible(find.byTooltip('Adicionar subtópico'));
     expect(find.byTooltip('Adicionar subtópico'), findsOneWidget);
 
     await tester.tap(find.byTooltip('Adicionar subtópico'));
     await tester.pumpAndSettle();
-    await tester.enterText(
-      find.byType(TextField).at(0),
-      'Topologia em estrela',
+    final childDialogFields = find.descendant(
+      of: find.byType(AlertDialog),
+      matching: find.byType(TextField),
     );
+    await tester.enterText(childDialogFields.at(0), 'Topologia em estrela');
     await tester.tap(find.text('Criar'));
     await tester.pumpAndSettle();
 
@@ -80,8 +78,12 @@ void main() {
 
     await tester.tap(find.byTooltip('Editar tópico').last);
     await tester.pumpAndSettle();
+    final editDialogFields = find.descendant(
+      of: find.byType(AlertDialog),
+      matching: find.byType(TextField),
+    );
     await tester.enterText(
-      find.byType(TextField).at(0),
+      editDialogFields.at(0),
       'Topologia em estrela editada',
     );
     await tester.tap(find.text('Salvar'));
