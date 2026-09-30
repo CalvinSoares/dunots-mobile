@@ -5,6 +5,7 @@ import '../../core/models/flashcard_session_summary.dart';
 import '../../shared/widgets/study_widgets.dart';
 import 'data/flashcard_review_preferences_repository.dart';
 import 'data/flashcard_session_repository.dart';
+import 'flashcard_progress_analytics.dart';
 
 class FlashcardProgressPage extends StatefulWidget {
   final FlashcardSessionRepository repository;
@@ -81,29 +82,12 @@ class _FlashcardProgressPageState extends State<FlashcardProgressPage> {
   }
 
   Widget _buildContent(_ProgressData data) {
-    final sessions = data.sessions;
-    final totalCards = sessions.fold<int>(
-      0,
-      (total, session) => total + session.cardCount,
-    );
-    final difficult = sessions.fold<int>(
-      0,
-      (total, session) => total + session.difficultCount,
-    );
-    final good = sessions.fold<int>(
-      0,
-      (total, session) => total + session.goodCount,
-    );
-    final easy = sessions.fold<int>(
-      0,
-      (total, session) => total + session.easyCount,
-    );
+    final report = data.report;
+    final current = report.currentPeriod;
+    final difficult = current.difficult;
+    final good = current.good;
+    final easy = current.easy;
     final classified = difficult + good + easy;
-    final average = totalCards / sessions.length;
-    final dailyTotals = _dailyTotals(sessions);
-    final maxDaily = dailyTotals.values.reduce(
-      (first, second) => first > second ? first : second,
-    );
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
@@ -118,13 +102,26 @@ class _FlashcardProgressPageState extends State<FlashcardProgressPage> {
           spacing: 10,
           runSpacing: 10,
           children: [
-            _metric('Cards', '$totalCards', Icons.style_outlined),
-            _metric('Sessões', '${sessions.length}', Icons.history),
-            _metric('Média/sessão', average.toStringAsFixed(1), Icons.speed),
+            _metric('Cards', '${current.cards}', Icons.style_outlined),
+            _metric('Sessões', '${current.sessions}', Icons.history),
+            _metric(
+              'Média/sessão',
+              current.averagePerSession.toStringAsFixed(1),
+              Icons.speed,
+            ),
+            _metric('Dias ativos', '${current.activeDays}', Icons.event),
           ],
         ),
         const SizedBox(height: 20),
         _buildDailyGoal(data),
+        const SizedBox(height: 12),
+        _buildWeeklyGoal(data),
+        const SizedBox(height: 12),
+        _buildComparison(report),
+        const SizedBox(height: 24),
+        _buildDailyChart(report.days),
+        const SizedBox(height: 24),
+        _buildWeeklyChart(report.weeks),
         const SizedBox(height: 24),
         const Text(
           'Distribuição das classificações',
@@ -151,29 +148,295 @@ class _FlashcardProgressPageState extends State<FlashcardProgressPage> {
         ),
         const SizedBox(height: 24),
         const Text(
-          'Atividade por dia',
+          'Detalhamento por dia',
           style: TextStyle(fontWeight: FontWeight.w700),
         ),
         const SizedBox(height: 10),
-        ...dailyTotals.entries.map(
-          (entry) => Padding(
+        ...report.days.reversed.map(
+          (day) => Padding(
             padding: const EdgeInsets.only(bottom: 10),
             child: Row(
               children: [
-                SizedBox(width: 82, child: Text(_formatDate(entry.key))),
+                SizedBox(width: 82, child: Text(_formatDate(day.day))),
                 Expanded(
                   child: LinearProgressIndicator(
-                    value: entry.value / maxDaily,
+                    value: report.currentPeriod.cards == 0
+                        ? 0
+                        : day.cards / report.currentPeriod.cards,
                     minHeight: 10,
                   ),
                 ),
                 const SizedBox(width: 10),
-                SizedBox(width: 30, child: Text('${entry.value}')),
+                SizedBox(width: 30, child: Text('${day.cards}')),
               ],
             ),
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildWeeklyGoal(_ProgressData data) {
+    final goal = data.preferences.weeklyGoal;
+    final completed = data.report.currentWeek.cards;
+    final progress = goal == 0 ? 0.0 : (completed / goal).clamp(0.0, 1.0);
+    final reached = completed >= goal;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  reached ? Icons.emoji_events_outlined : Icons.flag_outlined,
+                  color: reached
+                      ? Colors.amber.shade700
+                      : Theme.of(context).colorScheme.primary,
+                ),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text(
+                    'Meta semanal',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () => _changeWeeklyGoal(data.preferences),
+                  child: const Text('Definir'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              reached
+                  ? 'Meta concluída: $completed/$goal cards nesta semana.'
+                  : 'Esta semana: $completed/$goal cards revisados.',
+            ),
+            const SizedBox(height: 8),
+            LinearProgressIndicator(value: progress, minHeight: 10),
+            const SizedBox(height: 8),
+            Text(
+              '${data.report.currentWeek.activeDays} dias ativos · '
+              '${data.report.currentWeek.sessions} sessões',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildComparison(FlashcardProgressReport report) {
+    final change = report.currentPeriod.changeFrom(report.previousPeriod);
+    final changeLabel = change == null
+        ? 'sem base anterior'
+        : change == 0
+        ? 'igual ao período anterior'
+        : '${change > 0 ? '+' : ''}${(change * 100).round()}% vs. período anterior';
+    final changeColor = change == null || change == 0
+        ? Theme.of(context).colorScheme.onSurfaceVariant
+        : change > 0
+        ? Colors.green
+        : Theme.of(context).colorScheme.error;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Comparativo de evolução',
+              style: TextStyle(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: _comparisonValue(
+                    'Período atual',
+                    '${report.currentPeriod.cards} cards',
+                  ),
+                ),
+                Expanded(
+                  child: _comparisonValue(
+                    'Período anterior',
+                    '${report.previousPeriod.cards} cards',
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(
+              changeLabel,
+              style: TextStyle(color: changeColor, fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Retenção atual: ${(report.currentPeriod.retentionRate * 100).round()}% '
+              '· anterior: ${(report.previousPeriod.retentionRate * 100).round()}%',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _comparisonValue(String label, String value) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: Theme.of(context).textTheme.bodySmall),
+        const SizedBox(height: 3),
+        Text(value, style: const TextStyle(fontWeight: FontWeight.w800)),
+      ],
+    );
+  }
+
+  Widget _buildDailyChart(List<FlashcardDaySummary> days) {
+    final maxCards = days.fold<int>(
+      1,
+      (maximum, day) => day.cards > maximum ? day.cards : maximum,
+    );
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 14, 14, 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Atividade por dia',
+              style: TextStyle(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              height: 150,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: days
+                    .map(
+                      (day) => Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 2),
+                          child: Column(
+                            children: [
+                              SizedBox(
+                                height: 20,
+                                child: FittedBox(
+                                  child: Text(
+                                    '${day.cards}',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Expanded(
+                                child: Align(
+                                  alignment: Alignment.bottomCenter,
+                                  child: FractionallySizedBox(
+                                    heightFactor: day.cards / maxCards,
+                                    widthFactor: .72,
+                                    child: DecoratedBox(
+                                      decoration: BoxDecoration(
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .primary,
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(_weekday(day.day)),
+                            ],
+                          ),
+                        ),
+                      ),
+                    )
+                    .toList(growable: false),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWeeklyChart(List<FlashcardWeekSummary> weeks) {
+    final maxCards = weeks.fold<int>(
+      1,
+      (maximum, week) => week.cards > maximum ? week.cards : maximum,
+    );
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 14, 14, 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Evolução semanal',
+              style: TextStyle(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              height: 130,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: weeks
+                    .map(
+                      (week) => Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          child: Column(
+                            children: [
+                              Text('${week.cards}'),
+                              const SizedBox(height: 4),
+                              Expanded(
+                                child: Align(
+                                  alignment: Alignment.bottomCenter,
+                                  child: FractionallySizedBox(
+                                    heightFactor: week.cards / maxCards,
+                                    widthFactor: .58,
+                                    child: DecoratedBox(
+                                      decoration: BoxDecoration(
+                                        color: week == weeks.last
+                                            ? Theme.of(context)
+                                                  .colorScheme
+                                                  .secondary
+                                            : Theme.of(context)
+                                                  .colorScheme
+                                                  .primary
+                                                  .withValues(alpha: .55),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(_formatShortDate(week.start)),
+                            ],
+                          ),
+                        ),
+                      ),
+                    )
+                    .toList(growable: false),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Cada barra representa uma semana iniciada na segunda-feira.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -244,14 +507,17 @@ class _FlashcardProgressPageState extends State<FlashcardProgressPage> {
       builder: (_) => _DailyGoalDialog(currentGoal: current.dailyGoal),
     );
     if (goal == null || !mounted) return;
-    await _preferencesRepository.save(
-      FlashcardReviewPreferences(
-        dailyLimit: current.dailyLimit,
-        dailyGoal: goal,
-        sort: current.sort,
-        preferRecommended: current.preferRecommended,
-      ),
+    await _preferencesRepository.save(current.copyWith(dailyGoal: goal));
+    if (mounted) setState(_reload);
+  }
+
+  Future<void> _changeWeeklyGoal(FlashcardReviewPreferences current) async {
+    final goal = await showDialog<int>(
+      context: context,
+      builder: (_) => _WeeklyGoalDialog(currentGoal: current.weeklyGoal),
     );
+    if (goal == null || !mounted) return;
+    await _preferencesRepository.save(current.copyWith(weeklyGoal: goal));
     if (mounted) setState(_reload);
   }
 
@@ -284,29 +550,19 @@ class _FlashcardProgressPageState extends State<FlashcardProgressPage> {
     );
   }
 
-  Map<DateTime, int> _dailyTotals(List<FlashcardSessionSummary> sessions) {
-    final totals = <DateTime, int>{};
-    for (final session in sessions) {
-      final day = DateTime(
-        session.finishedAt.year,
-        session.finishedAt.month,
-        session.finishedAt.day,
-      );
-      totals.update(
-        day,
-        (value) => value + session.cardCount,
-        ifAbsent: () => session.cardCount,
-      );
-    }
-    final entries = totals.entries.toList()
-      ..sort((first, second) => second.key.compareTo(first.key));
-    return Map.fromEntries(entries);
-  }
-
   String _formatDate(DateTime date) {
     final day = date.day.toString().padLeft(2, '0');
     final month = date.month.toString().padLeft(2, '0');
     return '$day/$month';
+  }
+
+  String _formatShortDate(DateTime date) {
+    return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}';
+  }
+
+  String _weekday(DateTime date) {
+    const labels = ['seg', 'ter', 'qua', 'qui', 'sex', 'sáb', 'dom'];
+    return labels[date.weekday - 1];
   }
 
   void _reload() {
@@ -314,13 +570,19 @@ class _FlashcardProgressPageState extends State<FlashcardProgressPage> {
   }
 
   Future<_ProgressData> _loadProgress() async {
-    final sessions = await widget.repository.getRecent(days: _days);
+    final historyDays = _days < 28 ? 28 : _days * 2;
+    final sessions = await widget.repository.getRecent(days: historyDays);
     final todaySessions = await widget.repository.getForDay(DateTime.now());
     final preferences = await _preferencesRepository.get();
     return _ProgressData(
       sessions: sessions,
       todaySessions: todaySessions,
       preferences: preferences,
+      report: buildFlashcardProgressReport(
+        sessions,
+        reference: DateTime.now(),
+        windowDays: _days,
+      ),
     );
   }
 }
@@ -329,11 +591,13 @@ class _ProgressData {
   final List<FlashcardSessionSummary> sessions;
   final List<FlashcardSessionSummary> todaySessions;
   final FlashcardReviewPreferences preferences;
+  final FlashcardProgressReport report;
 
   const _ProgressData({
     required this.sessions,
     required this.todaySessions,
     required this.preferences,
+    required this.report,
   });
 }
 
@@ -366,6 +630,52 @@ class _DailyGoalDialog extends StatelessWidget {
                     (option) => RadioListTile<int>(
                       value: option,
                       title: Text('$option cards por dia'),
+                    ),
+                  )
+                  .toList(growable: false),
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancelar'),
+        ),
+      ],
+    );
+  }
+}
+
+class _WeeklyGoalDialog extends StatelessWidget {
+  final int currentGoal;
+
+  const _WeeklyGoalDialog({required this.currentGoal});
+
+  @override
+  Widget build(BuildContext context) {
+    const options = [25, 50, 100, 150, 200, 300];
+    return AlertDialog(
+      title: const Text('Definir meta semanal'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Align(
+            alignment: Alignment.centerLeft,
+            child: Text('Escolha quantos cards quer revisar por semana.'),
+          ),
+          const SizedBox(height: 8),
+          RadioGroup<int>(
+            groupValue: currentGoal,
+            onChanged: (value) {
+              if (value != null) Navigator.of(context).pop(value);
+            },
+            child: Column(
+              children: options
+                  .map(
+                    (option) => RadioListTile<int>(
+                      value: option,
+                      title: Text('$option cards por semana'),
                     ),
                   )
                   .toList(growable: false),

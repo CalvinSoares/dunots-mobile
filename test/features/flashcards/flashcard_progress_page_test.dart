@@ -50,7 +50,6 @@ void main() {
 
     expect(find.text('Progresso dos flashcards'), findsOneWidget);
     expect(find.text('Últimos 7 dias'), findsOneWidget);
-    expect(find.text('Distribuição das classificações'), findsOneWidget);
     expect(find.text('Hoje: 4/5 cards revisados.'), findsOneWidget);
     await tester.tap(find.text('Alterar'));
     await tester.pumpAndSettle();
@@ -59,9 +58,23 @@ void main() {
     await tester.pumpAndSettle();
     expect((await preferencesRepository.get()).dailyGoal, 10);
     expect(find.text('6'), findsWidgets);
+
+    await tester.scrollUntilVisible(find.text('Meta semanal'), 250);
+    await tester.tap(find.text('Definir'));
+    await tester.pumpAndSettle();
+    expect(find.text('Definir meta semanal'), findsOneWidget);
+    await tester.tap(find.text('150 cards por semana'));
+    await tester.pumpAndSettle();
+    expect((await preferencesRepository.get()).weeklyGoal, 150);
+
+    await tester.scrollUntilVisible(
+      find.text('Distribuição das classificações'),
+      500,
+    );
+    expect(find.text('Distribuição das classificações'), findsOneWidget);
     expect(find.textContaining('Difíceis'), findsOneWidget);
     expect(find.textContaining('33%'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('Atividade por dia'), 300);
-    expect(find.text('Atividade por dia'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Detalhamento por dia'), 300);
+    expect(find.text('Detalhamento por dia'), findsOneWidget);
   });
 }
