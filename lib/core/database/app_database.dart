@@ -12,7 +12,7 @@ class AppDatabase {
         path.join(await getDatabasesPath(), 'dunots.db');
     final database = await openDatabase(
       databasePath,
-      version: 18,
+      version: 21,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
       },
@@ -52,7 +52,9 @@ class AppDatabase {
         await _createFlashcardSessionsTable(database);
         await _createFlashcardReviewPreferencesTable(database);
         await _createQuestionsTable(database);
+        await _createQuizExamsTable(database);
         await _createQuizAttemptsTable(database);
+        await _createSyncTables(database);
       },
       onUpgrade: (database, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -156,6 +158,48 @@ class AppDatabase {
             'ADD COLUMN reminder_minute INTEGER NOT NULL DEFAULT 0',
           );
         }
+        if (oldVersion < 19) {
+          await database.execute(
+            'ALTER TABLE flashcard_review_preferences '
+            'ADD COLUMN weekly_goal INTEGER NOT NULL DEFAULT 100',
+          );
+        }
+        if (oldVersion < 20) {
+          await _createQuizExamsTable(database);
+          await database.execute(
+            'ALTER TABLE questions ADD COLUMN exam_id TEXT',
+          );
+          await database.execute(
+            "ALTER TABLE questions ADD COLUMN subject TEXT NOT NULL DEFAULT ''",
+          );
+          await database.execute(
+            "ALTER TABLE questions ADD COLUMN notes TEXT NOT NULL DEFAULT ''",
+          );
+          await database.execute(
+            'ALTER TABLE questions ADD COLUMN source_name TEXT',
+          );
+          await database.execute(
+            'ALTER TABLE questions ADD COLUMN source_page INTEGER',
+          );
+          await database.execute(
+            'ALTER TABLE questions ADD COLUMN visual_image TEXT',
+          );
+          await database.execute(
+            "ALTER TABLE questions ADD COLUMN visual_images TEXT NOT NULL DEFAULT '[]'",
+          );
+          await database.execute(
+            "ALTER TABLE questions ADD COLUMN updated_at TEXT NOT NULL DEFAULT ''",
+          );
+          await database.execute(
+            'UPDATE questions SET updated_at = created_at WHERE updated_at = \'\'',
+          );
+          await database.execute(
+            'CREATE INDEX IF NOT EXISTS questions_exam_index ON questions(exam_id)',
+          );
+        }
+        if (oldVersion < 21) {
+          await _createSyncTables(database);
+        }
       },
     );
 
@@ -220,6 +264,7 @@ class AppDatabase {
         id INTEGER PRIMARY KEY,
         daily_limit INTEGER NOT NULL DEFAULT 20,
         daily_goal INTEGER NOT NULL DEFAULT 20,
+        weekly_goal INTEGER NOT NULL DEFAULT 100,
         sort TEXT NOT NULL DEFAULT 'due',
         prefer_recommended INTEGER NOT NULL DEFAULT 0,
         reminder_enabled INTEGER NOT NULL DEFAULT 1,
@@ -242,12 +287,44 @@ class AppDatabase {
         role TEXT NOT NULL,
         topic TEXT NOT NULL DEFAULT '',
         exam TEXT NOT NULL DEFAULT '',
+        exam_id TEXT,
+        subject TEXT NOT NULL DEFAULT '',
+        notes TEXT NOT NULL DEFAULT '',
+        source_name TEXT,
+        source_page INTEGER,
+        visual_image TEXT,
+        visual_images TEXT NOT NULL DEFAULT '[]',
+        updated_at TEXT NOT NULL DEFAULT '',
         created_at TEXT NOT NULL
       )
     ''');
     await database.execute(
       'CREATE INDEX IF NOT EXISTS questions_number_index '
       'ON questions(question_number)',
+    );
+    await database.execute(
+      'CREATE INDEX IF NOT EXISTS questions_exam_index ON questions(exam_id)',
+    );
+  }
+
+  static Future<void> _createQuizExamsTable(Database database) async {
+    await database.execute('''
+      CREATE TABLE IF NOT EXISTS quiz_exams (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        contest_name TEXT NOT NULL,
+        vacancy TEXT NOT NULL,
+        board TEXT,
+        year INTEGER,
+        proof_version TEXT,
+        source_name TEXT,
+        answer_key_name TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
+    await database.execute(
+      'CREATE INDEX IF NOT EXISTS quiz_exams_year_index ON quiz_exams(year)',
     );
   }
 
@@ -270,5 +347,98 @@ class AppDatabase {
       'CREATE INDEX IF NOT EXISTS quiz_attempts_status_index '
       'ON quiz_attempts(status)',
     );
+  }
+
+  static Future<void> _createSyncTables(Database database) async {
+    await database.execute('''
+      CREATE TABLE IF NOT EXISTS sync_metadata (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      )
+    ''');
+    await database.execute('''
+      CREATE TABLE IF NOT EXISTS sync_tombstones (
+        id TEXT PRIMARY KEY,
+        collection TEXT NOT NULL,
+        record_id TEXT NOT NULL,
+        deleted_at TEXT NOT NULL,
+        deleted_by TEXT NOT NULL
+      )
+    ''');
+    await database.execute(
+      'CREATE INDEX IF NOT EXISTS sync_tombstones_collection_index '
+      'ON sync_tombstones(collection, record_id)',
+    );
+
+    await _createSyncTombstoneTrigger(
+      database,
+      name: 'sync_flashcards_delete',
+      table: 'flashcards',
+      collection: 'flashcards',
+      idExpression: 'OLD.id',
+    );
+    await _createSyncTombstoneTrigger(
+      database,
+      name: 'sync_quiz_exams_delete',
+      table: 'quiz_exams',
+      collection: 'quiz_exams',
+      idExpression: 'OLD.id',
+    );
+    await _createSyncTombstoneTrigger(
+      database,
+      name: 'sync_quiz_questions_delete',
+      table: 'questions',
+      collection: 'quiz_questions',
+      idExpression: 'OLD.id',
+    );
+    await _createSyncTombstoneTrigger(
+      database,
+      name: 'sync_quiz_attempts_delete',
+      table: 'quiz_attempts',
+      collection: 'quiz_attempts',
+      idExpression: 'OLD.id',
+    );
+    await _createSyncTombstoneTrigger(
+      database,
+      name: 'sync_study_tracks_delete',
+      table: 'study_tracks',
+      collection: 'study_roadmaps',
+      idExpression: 'OLD.id',
+    );
+    await _createSyncTombstoneTrigger(
+      database,
+      name: 'sync_study_nodes_delete',
+      table: 'study_nodes',
+      collection: 'roadmap_nodes',
+      idExpression: 'OLD.id',
+    );
+    await _createSyncTombstoneTrigger(
+      database,
+      name: 'sync_study_links_delete',
+      table: 'study_node_materials',
+      collection: 'roadmap_links',
+      idExpression:
+          "OLD.node_id || ':' || OLD.material_id || ':' || OLD.material_type",
+    );
+  }
+
+  static Future<void> _createSyncTombstoneTrigger(
+    Database database, {
+    required String name,
+    required String table,
+    required String collection,
+    required String idExpression,
+  }) async {
+    await database.execute('''
+      CREATE TRIGGER IF NOT EXISTS $name
+      AFTER DELETE ON $table
+      BEGIN
+        INSERT OR REPLACE INTO sync_tombstones
+          (id, collection, record_id, deleted_at, deleted_by)
+        VALUES
+          ('$collection:' || ($idExpression), '$collection', ($idExpression),
+           CURRENT_TIMESTAMP, 'local');
+      END
+    ''');
   }
 }
