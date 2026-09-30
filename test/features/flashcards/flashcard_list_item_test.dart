@@ -17,4 +17,22 @@ void main() {
     expect(find.text(card.front), findsOneWidget);
     expect(find.text(card.back), findsOneWidget);
   });
+
+  testWidgets('abre os detalhes ao tocar no flashcard', (tester) async {
+    final card = demoFlashcards.first;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: FlashcardListItem(card: card)),
+      ),
+    );
+
+    await tester.tap(find.text(card.front));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Detalhes do flashcard'), findsOneWidget);
+    expect(find.text('Pergunta'), findsOneWidget);
+    expect(find.text('Resposta'), findsOneWidget);
+    expect(find.text(card.back), findsOneWidget);
+  });
 }
