@@ -65,5 +65,25 @@ void main() {
     final nodes = await nodeRepository.getForTrack('track-001');
     expect(nodes, hasLength(2));
     expect(nodes.last.parentId, nodes.first.id);
+
+    await tester.tap(find.byTooltip('Editar tópico').last);
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byType(TextField).at(0),
+      'Topologia em estrela editada',
+    );
+    await tester.tap(find.text('Salvar'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Topologia em estrela editada'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Excluir tópico').first);
+    await tester.pumpAndSettle();
+    expect(find.text('Excluir tópico?'), findsOneWidget);
+    await tester.tap(find.text('Excluir'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Arquiteturas de rede'), findsNothing);
+    expect(find.text('Topologia em estrela editada'), findsNothing);
   });
 }
