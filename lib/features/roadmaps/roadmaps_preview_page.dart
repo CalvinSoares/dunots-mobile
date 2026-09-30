@@ -94,13 +94,20 @@ class _RoadmapsPreviewPageState extends State<RoadmapsPreviewPage> {
     }
   }
 
-  void _openTrack(StudyTrack track) {
-    Navigator.of(context).push(
+  Future<void> _openTrack(StudyTrack track) async {
+    await Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) =>
-            StudyTrackDetailsPage(track: track, repository: _nodeRepository),
+        builder: (_) => StudyTrackDetailsPage(
+          track: track,
+          repository: _nodeRepository,
+          trackRepository: _controller.repository,
+        ),
       ),
     );
+
+    if (mounted) {
+      await _controller.load();
+    }
   }
 
   Future<void> _showEditTrackDialog(

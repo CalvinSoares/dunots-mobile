@@ -68,6 +68,8 @@ class StudyNodesController extends ChangeNotifier {
     required String title,
     required String description,
     String? parentId,
+    String notes = '',
+    StudyPriority priority = StudyPriority.none,
   }) async {
     final normalizedTitle = title.trim();
 
@@ -82,6 +84,8 @@ class StudyNodesController extends ChangeNotifier {
       title: normalizedTitle,
       description: description.trim(),
       sortOrder: state.nodes.length,
+      notes: notes.trim(),
+      priority: priority,
     );
 
     await repository.create(node);
@@ -92,6 +96,8 @@ class StudyNodesController extends ChangeNotifier {
     required String id,
     required String title,
     required String description,
+    String notes = '',
+    StudyPriority priority = StudyPriority.none,
   }) async {
     final normalizedTitle = title.trim();
 
@@ -101,13 +107,26 @@ class StudyNodesController extends ChangeNotifier {
 
     final current = state.nodes.firstWhere((node) => node.id == id);
     await repository.update(
-      current.copyWith(title: normalizedTitle, description: description.trim()),
+      current.copyWith(
+        title: normalizedTitle,
+        description: description.trim(),
+        notes: notes.trim(),
+        priority: priority,
+      ),
     );
     await load();
   }
 
   Future<void> deleteNode(String id) async {
     await repository.delete(id);
+    await load();
+  }
+
+  Future<void> toggleCompletion(String id) async {
+    final current = state.nodes.firstWhere((node) => node.id == id);
+    await repository.update(
+      current.copyWith(isCompleted: !current.isCompleted),
+    );
     await load();
   }
 

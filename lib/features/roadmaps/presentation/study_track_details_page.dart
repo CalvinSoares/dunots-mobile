@@ -1,18 +1,22 @@
 import 'package:flutter/material.dart';
 
 import '../data/study_node_repository.dart';
+import '../data/study_track_repository.dart';
 import '../domain/study_node.dart';
 import '../domain/study_track.dart';
+import 'study_node_filters.dart';
 import 'study_nodes_controller.dart';
 
 class StudyTrackDetailsPage extends StatefulWidget {
   final StudyTrack track;
   final StudyNodeRepository repository;
+  final StudyTrackRepository? trackRepository;
 
   const StudyTrackDetailsPage({
     super.key,
     required this.track,
     required this.repository,
+    this.trackRepository,
   });
 
   @override
@@ -21,6 +25,9 @@ class StudyTrackDetailsPage extends StatefulWidget {
 
 class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
   late final StudyNodesController _controller;
+  String _searchQuery = '';
+  StudyPriority? _priorityFilter;
+  StudyNodeCompletionFilter _completionFilter = StudyNodeCompletionFilter.all;
 
   @override
   void initState() {
@@ -29,7 +36,7 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
       trackId: widget.track.id,
       repository: widget.repository,
     );
-    _controller.load();
+    _loadNodes();
   }
 
   @override
@@ -62,6 +69,8 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
                     label: const Text('Novo tópico'),
                   ),
                   const SizedBox(height: 18),
+                  _buildFilters(),
+                  const SizedBox(height: 18),
                   Expanded(child: _buildContent(context)),
                 ],
               ),
@@ -74,13 +83,26 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
 
   Widget _buildContent(BuildContext context) {
     final state = _controller.state;
+    final visibleNodes = StudyNodeFilters.apply(
+      nodes: state.nodes,
+      query: _searchQuery,
+      priority: _priorityFilter,
+      completion: _completionFilter,
+    );
 
     switch (state.status) {
       case StudyNodesStatus.initial:
       case StudyNodesStatus.loading:
         return const Center(child: CircularProgressIndicator());
       case StudyNodesStatus.empty:
-        return const Center(child: Text('Nenhum tópico cadastrado ainda.'));
+        return Column(
+          children: [
+            _buildProgress(state.nodes),
+            const Expanded(
+              child: Center(child: Text('Nenhum tópico cadastrado ainda.')),
+            ),
+          ],
+        );
       case StudyNodesStatus.error:
         return Center(
           child: Column(
@@ -96,8 +118,113 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
           ),
         );
       case StudyNodesStatus.data:
-        return ListView(children: _buildNodeTree(state.nodes));
+        return Column(
+          children: [
+            _buildProgress(state.nodes),
+            const SizedBox(height: 14),
+            Expanded(
+              child: visibleNodes.isEmpty
+                  ? const Center(
+                      child: Text('Nenhum tópico corresponde aos filtros.'),
+                    )
+                  : ListView(children: _buildNodeTree(visibleNodes)),
+            ),
+          ],
+        );
     }
+  }
+
+  Widget _buildFilters() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextField(
+          key: const ValueKey('study-node-search'),
+          onChanged: (value) => setState(() => _searchQuery = value),
+          decoration: const InputDecoration(
+            prefixIcon: Icon(Icons.search),
+            labelText: 'Buscar tópico',
+            hintText: 'Título, descrição ou anotação',
+          ),
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Expanded(
+              child: DropdownButtonFormField<StudyPriority?>(
+                initialValue: _priorityFilter,
+                decoration: const InputDecoration(labelText: 'Prioridade'),
+                items: [
+                  const DropdownMenuItem<StudyPriority?>(
+                    value: null,
+                    child: Text('Todas'),
+                  ),
+                  ...StudyPriority.values
+                      .where((priority) => priority != StudyPriority.none)
+                      .map(
+                        (priority) => DropdownMenuItem<StudyPriority?>(
+                          value: priority,
+                          child: Text(_priorityLabel(priority)),
+                        ),
+                      ),
+                ],
+                onChanged: (priority) =>
+                    setState(() => _priorityFilter = priority),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: DropdownButtonFormField<StudyNodeCompletionFilter>(
+                initialValue: _completionFilter,
+                decoration: const InputDecoration(labelText: 'Status'),
+                items: const [
+                  DropdownMenuItem(
+                    value: StudyNodeCompletionFilter.all,
+                    child: Text('Todos'),
+                  ),
+                  DropdownMenuItem(
+                    value: StudyNodeCompletionFilter.pending,
+                    child: Text('Pendentes'),
+                  ),
+                  DropdownMenuItem(
+                    value: StudyNodeCompletionFilter.completed,
+                    child: Text('Concluídos'),
+                  ),
+                ],
+                onChanged: (filter) {
+                  if (filter != null) {
+                    setState(() => _completionFilter = filter);
+                  }
+                },
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildProgress(List<StudyNode> nodes) {
+    final completed = nodes.where((node) => node.isCompleted).length;
+    final progress = nodes.isEmpty ? 0.0 : completed / nodes.length;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'Progresso',
+              style: TextStyle(fontWeight: FontWeight.w700),
+            ),
+            Text('$completed/${nodes.length} itens concluídos'),
+          ],
+        ),
+        const SizedBox(height: 8),
+        LinearProgressIndicator(value: progress),
+      ],
+    );
   }
 
   List<Widget> _buildNodeTree(
@@ -132,6 +259,12 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
                       : const Color(0xFFB79BFF),
                 ),
                 const SizedBox(width: 10),
+                Checkbox(
+                  value: node.isCompleted,
+                  onChanged: (_) => _toggleCompletion(node.id),
+                ),
+                if (node.priority != StudyPriority.none)
+                  _PriorityFlag(priority: node.priority),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -150,6 +283,19 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
                           ),
                         ),
                       ],
+                      if (node.notes.isNotEmpty) ...[
+                        const SizedBox(height: 3),
+                        Text(
+                          node.notes,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Color(0xFFB6B7AD),
+                            fontSize: 12,
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -159,8 +305,8 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
                   onAddChild: () => _showNodeDialog(context, parentId: node.id),
                   onEdit: () => _showNodeDialog(context, node: node),
                   onDelete: () => _confirmDelete(context, node),
-                  onMoveUp: () => _controller.moveNode(node.id, direction: -1),
-                  onMoveDown: () => _controller.moveNode(node.id, direction: 1),
+                  onMoveUp: () => _moveNode(node.id, direction: -1),
+                  onMoveDown: () => _moveNode(node.id, direction: 1),
                 ),
               ],
             ),
@@ -188,6 +334,42 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
     return index >= 0 && target >= 0 && target < siblings.length;
   }
 
+  Future<void> _loadNodes() async {
+    await _controller.load();
+    await _syncTrackProgress();
+  }
+
+  Future<void> _toggleCompletion(String nodeId) async {
+    await _controller.toggleCompletion(nodeId);
+    await _syncTrackProgress();
+  }
+
+  Future<void> _moveNode(String nodeId, {required int direction}) async {
+    await _controller.moveNode(nodeId, direction: direction);
+    await _syncTrackProgress();
+  }
+
+  Future<void> _syncTrackProgress() async {
+    final trackRepository = widget.trackRepository;
+    if (trackRepository == null) {
+      return;
+    }
+
+    final tracks = await trackRepository.getAll();
+    final matchingTracks = tracks.where((track) => track.id == widget.track.id);
+    if (matchingTracks.isEmpty) {
+      return;
+    }
+
+    final nodes = _controller.state.nodes;
+    await trackRepository.update(
+      matchingTracks.first.copyWith(
+        completedItems: nodes.where((node) => node.isCompleted).length,
+        totalItems: nodes.length,
+      ),
+    );
+  }
+
   Future<void> _showNodeDialog(
     BuildContext context, {
     String? parentId,
@@ -211,14 +393,19 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
           title: data.title,
           description: data.description,
           parentId: parentId,
+          notes: data.notes,
+          priority: data.priority,
         );
       } else {
         await _controller.updateNode(
           id: node.id,
           title: data.title,
           description: data.description,
+          notes: data.notes,
+          priority: data.priority,
         );
       }
+      await _syncTrackProgress();
     } on ArgumentError catch (error) {
       if (!context.mounted) {
         return;
@@ -255,6 +442,7 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
     }
 
     await _controller.deleteNode(node.id);
+    await _syncTrackProgress();
   }
 }
 
@@ -325,8 +513,62 @@ class _NodeActions extends StatelessWidget {
 class _NodeFormData {
   final String title;
   final String description;
+  final String notes;
+  final StudyPriority priority;
 
-  const _NodeFormData({required this.title, required this.description});
+  const _NodeFormData({
+    required this.title,
+    required this.description,
+    required this.notes,
+    required this.priority,
+  });
+}
+
+class _PriorityFlag extends StatelessWidget {
+  final StudyPriority priority;
+
+  const _PriorityFlag({required this.priority});
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: _priorityLabel(priority),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: Icon(Icons.flag, color: _priorityColor(priority)),
+      ),
+    );
+  }
+}
+
+String _priorityLabel(StudyPriority priority) {
+  switch (priority) {
+    case StudyPriority.none:
+      return 'Sem prioridade';
+    case StudyPriority.low:
+      return 'Prioridade baixa';
+    case StudyPriority.medium:
+      return 'Prioridade média';
+    case StudyPriority.high:
+      return 'Prioridade alta';
+    case StudyPriority.urgent:
+      return 'Prioridade urgente';
+  }
+}
+
+Color _priorityColor(StudyPriority priority) {
+  switch (priority) {
+    case StudyPriority.none:
+      return const Color(0xFFB6B7AD);
+    case StudyPriority.low:
+      return const Color(0xFF78B8FF);
+    case StudyPriority.medium:
+      return const Color(0xFFFFD166);
+    case StudyPriority.high:
+      return const Color(0xFFFF9F68);
+    case StudyPriority.urgent:
+      return const Color(0xFFFF7168);
+  }
 }
 
 class _NodeFormDialog extends StatefulWidget {
@@ -342,6 +584,8 @@ class _NodeFormDialog extends StatefulWidget {
 class _NodeFormDialogState extends State<_NodeFormDialog> {
   late final TextEditingController titleController;
   late final TextEditingController descriptionController;
+  late final TextEditingController notesController;
+  late StudyPriority selectedPriority;
   String? validationError;
 
   @override
@@ -351,19 +595,26 @@ class _NodeFormDialogState extends State<_NodeFormDialog> {
     descriptionController = TextEditingController(
       text: widget.node?.description,
     );
+    notesController = TextEditingController(text: widget.node?.notes);
+    selectedPriority = widget.node?.priority ?? StudyPriority.none;
   }
 
   @override
   void dispose() {
     titleController.dispose();
     descriptionController.dispose();
+    notesController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text(widget.isChild ? 'Novo subtópico' : 'Novo tópico'),
+      title: Text(
+        widget.node == null
+            ? (widget.isChild ? 'Novo subtópico' : 'Novo tópico')
+            : 'Editar tópico',
+      ),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -382,6 +633,39 @@ class _NodeFormDialogState extends State<_NodeFormDialog> {
               maxLines: 3,
               decoration: const InputDecoration(
                 labelText: 'Descrição (opcional)',
+              ),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<StudyPriority>(
+              initialValue: selectedPriority,
+              decoration: const InputDecoration(labelText: 'Prioridade'),
+              items: StudyPriority.values
+                  .map(
+                    (priority) => DropdownMenuItem(
+                      value: priority,
+                      child: Row(
+                        children: [
+                          Icon(Icons.flag, color: _priorityColor(priority)),
+                          const SizedBox(width: 8),
+                          Text(_priorityLabel(priority)),
+                        ],
+                      ),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (priority) {
+                if (priority != null) {
+                  setState(() => selectedPriority = priority);
+                }
+              },
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: notesController,
+              maxLines: 4,
+              decoration: const InputDecoration(
+                labelText: 'Anotações (opcional)',
+                hintText: 'Registre observações para este tópico',
               ),
             ),
             if (validationError != null) ...[
@@ -419,6 +703,8 @@ class _NodeFormDialogState extends State<_NodeFormDialog> {
       _NodeFormData(
         title: titleController.text,
         description: descriptionController.text,
+        notes: notesController.text,
+        priority: selectedPriority,
       ),
     );
   }
