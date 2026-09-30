@@ -1,16 +1,21 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'package:dunots_mobile/core/models/flashcard.dart';
+import 'package:dunots_mobile/core/models/flashcard_review_preferences.dart';
 import 'package:dunots_mobile/core/models/flashcard_session_summary.dart';
 import 'package:dunots_mobile/features/questions/data/question_repository.dart';
 
 import '../../shared/widgets/study_widgets.dart';
 import 'data/flashcard_repository.dart';
+import 'data/flashcard_review_preferences_repository.dart';
 import 'data/flashcard_session_repository.dart';
 import '../roadmaps/data/study_material_catalog_repository.dart';
 import '../roadmaps/domain/study_material.dart';
 import 'flashcard_form_dialog.dart';
 import 'flashcard_list_item.dart';
+import 'flashcard_progress_page.dart';
 import 'flashcard_session_history_page.dart';
 import 'flashcard_study_page.dart';
 
@@ -18,12 +23,14 @@ class FlashcardsPreviewPage extends StatefulWidget {
   final FlashcardRepository? repository;
   final QuestionRepository? questionRepository;
   final FlashcardSessionRepository? sessionRepository;
+  final FlashcardReviewPreferencesRepository? preferencesRepository;
 
   const FlashcardsPreviewPage({
     super.key,
     this.repository,
     this.questionRepository,
     this.sessionRepository,
+    this.preferencesRepository,
   });
 
   @override
@@ -35,12 +42,18 @@ class _FlashcardsPreviewPageState extends State<FlashcardsPreviewPage> {
   late final StudyMaterialCatalogRepository _materialRepository;
   late final Future<List<Flashcard>> _cardsFuture;
   late final FlashcardSessionRepository _sessionRepository;
+  late final FlashcardReviewPreferencesRepository _preferencesRepository;
   late Future<List<FlashcardSessionSummary>> _todaySessionsFuture;
   String _filter = 'all';
   String _search = '';
   String _selectedTag = '';
   String _sort = 'due';
   int _dailyLimit = 20;
+  int _dailyGoal = 20;
+  bool _preferRecommended = false;
+  bool _reminderEnabled = true;
+  int _reminderHour = 0;
+  int _reminderMinute = 0;
 
   @override
   void initState() {
@@ -48,12 +61,16 @@ class _FlashcardsPreviewPageState extends State<FlashcardsPreviewPage> {
     _repository = widget.repository ?? InMemoryFlashcardRepository();
     _sessionRepository =
         widget.sessionRepository ?? InMemoryFlashcardSessionRepository();
+    _preferencesRepository =
+        widget.preferencesRepository ??
+        InMemoryFlashcardReviewPreferencesRepository();
     _materialRepository = StudyMaterialCatalogRepository(
       flashcardRepository: _repository,
       questionRepository:
           widget.questionRepository ?? InMemoryQuestionRepository(),
     );
     _reload();
+    unawaited(_loadPreferences());
   }
 
   @override
@@ -117,6 +134,16 @@ class _FlashcardsPreviewPageState extends State<FlashcardsPreviewPage> {
               .where((card) => card.isDueAt(now))
               .take(_dailyLimit == 0 ? visibleCards.length : _dailyLimit)
               .toList(growable: false);
+          final recommendedCards =
+              _buildRecommendedCards(
+                    difficultCards: difficultCards,
+                    dueCards: dueCards,
+                  )
+                  .take(_dailyLimit == 0 ? cards.length : _dailyLimit)
+                  .toList(growable: false);
+          final activeStudyCards = _preferRecommended
+              ? recommendedCards
+              : studyCards;
           final tags = cards.expand((card) => card.tags).toSet().toList()
             ..sort();
           return Column(
@@ -131,6 +158,11 @@ class _FlashcardsPreviewPageState extends State<FlashcardsPreviewPage> {
                       onPressed: _openHistory,
                       icon: const Icon(Icons.insights_outlined),
                       label: const Text('Histórico'),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: _openProgress,
+                      icon: const Icon(Icons.trending_up_outlined),
+                      label: const Text('Progresso'),
                     ),
                     FilledButton.icon(
                       onPressed: _createFlashcard,
@@ -180,7 +212,7 @@ class _FlashcardsPreviewPageState extends State<FlashcardsPreviewPage> {
                   ),
                 ],
                 onChanged: (value) {
-                  if (value != null) setState(() => _sort = value);
+                  if (value != null) _changeSort(value);
                 },
               ),
               const SizedBox(height: 12),
@@ -194,8 +226,17 @@ class _FlashcardsPreviewPageState extends State<FlashcardsPreviewPage> {
                   DropdownMenuItem(value: 0, child: Text('Todos os cards')),
                 ],
                 onChanged: (value) {
-                  if (value != null) setState(() => _dailyLimit = value);
+                  if (value != null) _changeDailyLimit(value);
                 },
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Priorizar cards difíceis'),
+                subtitle: const Text(
+                  'Inclui primeiro os cards difíceis na próxima sessão.',
+                ),
+                value: _preferRecommended,
+                onChanged: _changePreferRecommended,
               ),
               if (tags.isNotEmpty) ...[
                 const SizedBox(height: 12),
@@ -247,14 +288,17 @@ class _FlashcardsPreviewPageState extends State<FlashcardsPreviewPage> {
               SizedBox(
                 width: double.infinity,
                 child: FilledButton.icon(
-                  onPressed: studyCards.isEmpty
+                  onPressed: activeStudyCards.isEmpty
                       ? null
-                      : () => _startStudy(studyCards),
+                      : () => _startStudy(activeStudyCards),
                   icon: const Icon(Icons.play_arrow_rounded),
                   label: Text(
-                    studyCards.isEmpty
+                    activeStudyCards.isEmpty
                         ? 'Nenhuma revisão pendente'
-                        : 'Iniciar revisão · ${studyCards.length} pendentes',
+                        : _preferRecommended
+                        ? 'Iniciar recomendada · '
+                              '${activeStudyCards.length} cards'
+                        : 'Iniciar revisão · ${activeStudyCards.length} pendentes',
                   ),
                 ),
               ),
@@ -291,6 +335,49 @@ class _FlashcardsPreviewPageState extends State<FlashcardsPreviewPage> {
     _todaySessionsFuture = _sessionRepository.getForDay(DateTime.now());
   }
 
+  Future<void> _loadPreferences() async {
+    final preferences = await _preferencesRepository.get();
+    if (!mounted) return;
+    setState(() {
+      _dailyLimit = preferences.dailyLimit;
+      _dailyGoal = preferences.dailyGoal;
+      _sort = preferences.sort;
+      _preferRecommended = preferences.preferRecommended;
+      _reminderEnabled = preferences.reminderEnabled;
+      _reminderHour = preferences.reminderHour;
+      _reminderMinute = preferences.reminderMinute;
+    });
+  }
+
+  void _changeDailyLimit(int value) {
+    setState(() => _dailyLimit = value);
+    unawaited(_savePreferences());
+  }
+
+  void _changeSort(String value) {
+    setState(() => _sort = value);
+    unawaited(_savePreferences());
+  }
+
+  void _changePreferRecommended(bool value) {
+    setState(() => _preferRecommended = value);
+    unawaited(_savePreferences());
+  }
+
+  Future<void> _savePreferences() {
+    return _preferencesRepository.save(
+      FlashcardReviewPreferences(
+        dailyLimit: _dailyLimit,
+        dailyGoal: _dailyGoal,
+        sort: _sort,
+        preferRecommended: _preferRecommended,
+        reminderEnabled: _reminderEnabled,
+        reminderHour: _reminderHour,
+        reminderMinute: _reminderMinute,
+      ),
+    );
+  }
+
   Future<void> _startStudy(List<Flashcard> cards) async {
     await Navigator.of(context).push(
       MaterialPageRoute(
@@ -310,6 +397,17 @@ class _FlashcardsPreviewPageState extends State<FlashcardsPreviewPage> {
       MaterialPageRoute(
         builder: (_) =>
             FlashcardSessionHistoryPage(repository: _sessionRepository),
+      ),
+    );
+  }
+
+  Future<void> _openProgress() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => FlashcardProgressPage(
+          repository: _sessionRepository,
+          preferencesRepository: _preferencesRepository,
+        ),
       ),
     );
   }
@@ -465,21 +563,10 @@ class _FlashcardsPreviewPageState extends State<FlashcardsPreviewPage> {
     required List<Flashcard> difficultCards,
     required List<Flashcard> dueCards,
   }) async {
-    final candidates = <String, Flashcard>{};
-    for (final card in difficultCards) {
-      candidates[card.id] = card;
-    }
-    for (final card in dueCards) {
-      candidates[card.id] = card;
-    }
-    final orderedCards = candidates.values.toList()
-      ..sort((first, second) {
-        final difficultOrder = _difficultyRank(second).compareTo(
-          _difficultyRank(first),
-        );
-        if (difficultOrder != 0) return difficultOrder;
-        return _compareCards(first, second);
-      });
+    final orderedCards = _buildRecommendedCards(
+      difficultCards: difficultCards,
+      dueCards: dueCards,
+    );
     if (orderedCards.isEmpty || !mounted) return;
 
     final limit = await showDialog<int>(
@@ -494,6 +581,27 @@ class _FlashcardsPreviewPageState extends State<FlashcardsPreviewPage> {
         .take(limit == 0 ? orderedCards.length : limit)
         .toList(growable: false);
     await _startStudy(cards);
+  }
+
+  List<Flashcard> _buildRecommendedCards({
+    required List<Flashcard> difficultCards,
+    required List<Flashcard> dueCards,
+  }) {
+    final candidates = <String, Flashcard>{};
+    for (final card in difficultCards) {
+      candidates[card.id] = card;
+    }
+    for (final card in dueCards) {
+      candidates[card.id] = card;
+    }
+    final orderedCards = candidates.values.toList()
+      ..sort((first, second) {
+        final difficultOrder = _difficultyRank(second)
+            .compareTo(_difficultyRank(first));
+        if (difficultOrder != 0) return difficultOrder;
+        return _compareCards(first, second);
+      });
+    return orderedCards;
   }
 
   int _difficultyRank(Flashcard card) => card.lastRating == 'difícil' ? 1 : 0;
@@ -606,8 +714,7 @@ class _RecommendedSessionDialog extends StatefulWidget {
       _RecommendedSessionDialogState();
 }
 
-class _RecommendedSessionDialogState
-    extends State<_RecommendedSessionDialog> {
+class _RecommendedSessionDialogState extends State<_RecommendedSessionDialog> {
   late int _selectedCount;
 
   @override
@@ -641,19 +748,25 @@ class _RecommendedSessionDialogState
               'Os cards difíceis aparecem primeiro. Quantos você quer revisar?',
             ),
             const SizedBox(height: 8),
-            ..._options.map(
-              (option) => RadioListTile<int>(
-                value: option,
-                groupValue: _selectedCount,
-                contentPadding: EdgeInsets.zero,
-                title: Text(
-                  option == widget.availableCount
-                      ? 'Todos os cards ($option)'
-                      : '$option cards',
-                ),
-                onChanged: (value) {
-                  if (value != null) setState(() => _selectedCount = value);
-                },
+            RadioGroup<int>(
+              groupValue: _selectedCount,
+              onChanged: (value) {
+                if (value != null) setState(() => _selectedCount = value);
+              },
+              child: Column(
+                children: _options
+                    .map(
+                      (option) => RadioListTile<int>(
+                        value: option,
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(
+                          option == widget.availableCount
+                              ? 'Todos os cards ($option)'
+                              : '$option cards',
+                        ),
+                      ),
+                    )
+                    .toList(growable: false),
               ),
             ),
           ],
