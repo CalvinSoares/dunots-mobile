@@ -7,19 +7,26 @@ import '../quizzes/quiz_attempt_page.dart';
 import '../quizzes/quiz_form_dialog.dart';
 import '../quizzes/quiz_history_page.dart';
 import 'data/question_repository.dart';
+import 'data/quiz_exam_repository.dart';
 import 'domain/question.dart';
+import 'domain/quiz_exam.dart';
 import 'question_form_dialog.dart';
+import 'quiz_exam_list_dialog.dart';
 import 'question_filters.dart';
 import 'question_list_item.dart';
+import 'question_bulk_form_dialog.dart';
+import 'pdf_question_import_dialog.dart';
 
 class QuestionsPreviewPage extends StatefulWidget {
   final QuestionRepository? repository;
   final QuizAttemptRepository? attemptRepository;
+  final QuizExamRepository? examRepository;
 
   const QuestionsPreviewPage({
     super.key,
     this.repository,
     this.attemptRepository,
+    this.examRepository,
   });
 
   @override
@@ -29,7 +36,9 @@ class QuestionsPreviewPage extends StatefulWidget {
 class _QuestionsPreviewPageState extends State<QuestionsPreviewPage> {
   late final QuestionRepository _repository;
   late final QuizAttemptRepository _attemptRepository;
+  late final QuizExamRepository _examRepository;
   late Future<List<Question>> _questionsFuture;
+  late Future<List<QuizExam>> _examsFuture;
   String _search = '';
   String? _selectedContest;
   String? _selectedRole;
@@ -42,6 +51,7 @@ class _QuestionsPreviewPageState extends State<QuestionsPreviewPage> {
     _repository = widget.repository ?? InMemoryQuestionRepository();
     _attemptRepository =
         widget.attemptRepository ?? InMemoryQuizAttemptRepository();
+    _examRepository = widget.examRepository ?? InMemoryQuizExamRepository();
     _reload();
   }
 
@@ -62,6 +72,21 @@ class _QuestionsPreviewPageState extends State<QuestionsPreviewPage> {
                 onPressed: _createQuestion,
                 icon: const Icon(Icons.add),
                 label: const Text('Nova questão'),
+              ),
+              OutlinedButton.icon(
+                onPressed: _createQuestionsInBulk,
+                icon: const Icon(Icons.playlist_add),
+                label: const Text('Cadastro em massa'),
+              ),
+              OutlinedButton.icon(
+                onPressed: _importPdf,
+                icon: const Icon(Icons.picture_as_pdf_outlined),
+                label: const Text('Importar PDF'),
+              ),
+              OutlinedButton.icon(
+                onPressed: _openExams,
+                icon: const Icon(Icons.folder_outlined),
+                label: const Text('Provas/vagas'),
               ),
               OutlinedButton.icon(
                 onPressed: () {
@@ -243,6 +268,7 @@ class _QuestionsPreviewPageState extends State<QuestionsPreviewPage> {
 
   void _reload() {
     _questionsFuture = _repository.getAll();
+    _examsFuture = _examRepository.getAll();
   }
 
   List<String> _optionsFor(
@@ -258,14 +284,38 @@ class _QuestionsPreviewPageState extends State<QuestionsPreviewPage> {
   }
 
   Future<void> _createQuestion() async {
+    final exams = await _examsFuture;
+    if (!mounted) return;
     final data = await showDialog<QuestionFormData>(
       context: context,
-      builder: (_) => const QuestionFormDialog(),
+      builder: (_) => QuestionFormDialog(exams: exams),
     );
     if (data == null || !mounted) {
       return;
     }
     await _save(() => _repository.create(data.question));
+  }
+
+  Future<void> _createQuestionsInBulk() async {
+    final exams = await _examsFuture;
+    if (!mounted) return;
+    final data = await showDialog<QuestionBulkFormData>(
+      context: context,
+      builder: (_) => QuestionBulkFormDialog(exams: exams),
+    );
+    if (data == null || !mounted) return;
+    await _save(() => _repository.createMany(data.questions));
+  }
+
+  Future<void> _importPdf() async {
+    final exams = await _examsFuture;
+    if (!mounted) return;
+    final data = await showDialog<PdfQuestionImportData>(
+      context: context,
+      builder: (_) => PdfQuestionImportDialog(exams: exams),
+    );
+    if (data == null || !mounted) return;
+    await _save(() => _repository.createMany(data.questions));
   }
 
   Future<void> _createQuiz() async {
@@ -321,14 +371,25 @@ class _QuestionsPreviewPageState extends State<QuestionsPreviewPage> {
   }
 
   Future<void> _editQuestion(Question question) async {
+    final exams = await _examsFuture;
+    if (!mounted) return;
     final data = await showDialog<QuestionFormData>(
       context: context,
-      builder: (_) => QuestionFormDialog(initialQuestion: question),
+      builder: (_) =>
+          QuestionFormDialog(initialQuestion: question, exams: exams),
     );
     if (data == null || !mounted) {
       return;
     }
     await _save(() => _repository.update(data.question));
+  }
+
+  Future<void> _openExams() async {
+    await showDialog<void>(
+      context: context,
+      builder: (_) => QuizExamListDialog(repository: _examRepository),
+    );
+    if (mounted) setState(_reload);
   }
 
   Future<void> _save(Future<void> Function() action) async {
