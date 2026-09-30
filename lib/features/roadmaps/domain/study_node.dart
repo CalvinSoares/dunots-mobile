@@ -14,4 +14,15 @@ class StudyNode {
     required this.description,
     required this.sortOrder,
   });
+
+  StudyNode copyWith({String? title, String? description, int? sortOrder}) {
+    return StudyNode(
+      id: id,
+      trackId: trackId,
+      parentId: parentId,
+      title: title ?? this.title,
+      description: description ?? this.description,
+      sortOrder: sortOrder ?? this.sortOrder,
+    );
+  }
 }

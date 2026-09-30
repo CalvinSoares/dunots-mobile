@@ -87,4 +87,51 @@ class StudyNodesController extends ChangeNotifier {
     await repository.create(node);
     await load();
   }
+
+  Future<void> updateNode({
+    required String id,
+    required String title,
+    required String description,
+  }) async {
+    final normalizedTitle = title.trim();
+
+    if (normalizedTitle.isEmpty) {
+      throw ArgumentError('O título do tópico é obrigatório.');
+    }
+
+    final current = state.nodes.firstWhere((node) => node.id == id);
+    await repository.update(
+      current.copyWith(title: normalizedTitle, description: description.trim()),
+    );
+    await load();
+  }
+
+  Future<void> deleteNode(String id) async {
+    await repository.delete(id);
+    await load();
+  }
+
+  Future<void> moveNode(String id, {required int direction}) async {
+    if (direction != -1 && direction != 1) {
+      throw ArgumentError('A direção deve ser -1 ou 1.');
+    }
+
+    final current = state.nodes.firstWhere((node) => node.id == id);
+    final siblings =
+        state.nodes.where((node) => node.parentId == current.parentId).toList()
+          ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+    final currentIndex = siblings.indexWhere((node) => node.id == id);
+    final targetIndex = currentIndex + direction;
+
+    if (currentIndex == -1 ||
+        targetIndex < 0 ||
+        targetIndex >= siblings.length) {
+      return;
+    }
+
+    final target = siblings[targetIndex];
+    await repository.update(current.copyWith(sortOrder: target.sortOrder));
+    await repository.update(target.copyWith(sortOrder: current.sortOrder));
+    await load();
+  }
 }
