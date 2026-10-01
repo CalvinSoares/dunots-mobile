@@ -1,4 +1,4 @@
-enum StudyMaterialType { flashcard, question, document, diagram }
+enum StudyMaterialType { flashcard, question, challenge, document, diagram }
 
 class StudyMaterial {
   final String id;
