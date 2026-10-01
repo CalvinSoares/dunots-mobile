@@ -5,6 +5,8 @@ import '../diagrams/data/diagram_repository.dart';
 import '../diagrams/diagram_link_dialog.dart';
 import '../diagrams/domain/study_diagram.dart';
 import 'data/challenge_repository.dart';
+import 'challenge_details_page.dart';
+import 'challenge_study_session_page.dart';
 import 'domain/challenge.dart';
 
 class ChallengesPreviewPage extends StatefulWidget {
@@ -82,6 +84,17 @@ class _ChallengesPreviewPageState extends State<ChallengesPreviewPage> {
                   ),
                 ],
               ),
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: OutlinedButton.icon(
+                  onPressed: challenges.isEmpty
+                      ? null
+                      : () => _startSession(challenges),
+                  icon: const Icon(Icons.play_arrow),
+                  label: const Text('Iniciar sessão com a busca atual'),
+                ),
+              ),
               const SizedBox(height: 16),
               if (challenges.isEmpty)
                 const StudyEmptyState(
@@ -98,6 +111,23 @@ class _ChallengesPreviewPageState extends State<ChallengesPreviewPage> {
     );
   }
 
+  Future<void> _startSession(List<Challenge> challenges) async {
+    final now = DateTime.now();
+    final due = challenges
+        .where((challenge) => challenge.isDueAt(now))
+        .toList();
+    final session = due.isEmpty ? challenges : due;
+    final reviewed = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => ChallengeStudySessionPage(
+          challenges: session,
+          repository: _repository,
+        ),
+      ),
+    );
+    if (reviewed == true && mounted) setState(_reload);
+  }
+
   Widget _buildCard(Challenge challenge) {
     final color = switch (challenge.difficulty) {
       ChallengeDifficulty.easy => Colors.green,
@@ -107,6 +137,7 @@ class _ChallengesPreviewPageState extends State<ChallengesPreviewPage> {
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
       child: ListTile(
+        onTap: () => _openDetails(challenge),
         leading: CircleAvatar(
           backgroundColor: color.withValues(alpha: 0.18),
           child: Icon(Icons.code, color: color),
@@ -127,6 +158,16 @@ class _ChallengesPreviewPageState extends State<ChallengesPreviewPage> {
         ),
       ),
     );
+  }
+
+  Future<void> _openDetails(Challenge challenge) async {
+    final reviewed = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) =>
+            ChallengeDetailsPage(challenge: challenge, repository: _repository),
+      ),
+    );
+    if (reviewed == true && mounted) setState(_reload);
   }
 
   Future<void> _create() async {

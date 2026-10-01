@@ -96,4 +96,6 @@ class Challenge {
       updatedAt: updatedAt ?? this.updatedAt,
     );
   }
+
+  bool isDueAt(DateTime now) => dueAt == null || !dueAt!.isAfter(now);
 }

@@ -4,6 +4,8 @@ import 'package:sqflite/sqflite.dart';
 
 import '../../../core/database/app_database.dart';
 import '../domain/challenge.dart';
+import '../domain/challenge_review.dart';
+import '../domain/challenge_scheduler.dart';
 import 'challenge_repository.dart';
 
 class SqliteChallengeRepository implements ChallengeRepository {
@@ -36,6 +38,67 @@ class SqliteChallengeRepository implements ChallengeRepository {
   @override
   Future<void> delete(String id) async =>
       database.delete('challenges', where: 'id = ?', whereArgs: [id]);
+
+  @override
+  Future<void> recordReview({
+    required String challengeId,
+    required String rating,
+    required DateTime reviewedAt,
+  }) async {
+    final rows = await database.query(
+      'challenges',
+      columns: ['interval', 'ease_factor', 'repetitions'],
+      where: 'id = ?',
+      whereArgs: [challengeId],
+      limit: 1,
+    );
+    if (rows.isEmpty) throw StateError('Desafio não encontrado.');
+    final challenge = rows.first;
+    final previousInterval = challenge['interval'] as int? ?? 0;
+    final schedule = ChallengeScheduler.next(
+      rating: rating,
+      reviewedAt: reviewedAt,
+      interval: previousInterval,
+      easeFactor: (challenge['ease_factor'] as num?)?.toDouble() ?? 2.5,
+      repetitions: challenge['repetitions'] as int? ?? 0,
+    );
+    await database.transaction((transaction) async {
+      final changed = await transaction.update(
+        'challenges',
+        {
+          'solved_at': reviewedAt.toIso8601String(),
+          'due_at': schedule.dueAt.toIso8601String(),
+          'interval': schedule.interval,
+          'ease_factor': schedule.easeFactor,
+          'repetitions': schedule.repetitions,
+          'updated_at': reviewedAt.toIso8601String(),
+        },
+        where: 'id = ?',
+        whereArgs: [challengeId],
+      );
+      if (changed == 0) throw StateError('Desafio não encontrado.');
+      await transaction.insert('challenge_reviews', {
+        'id': 'challenge-review-${reviewedAt.microsecondsSinceEpoch}',
+        'challenge_id': challengeId,
+        'rating': rating,
+        'reviewed_at': reviewedAt.toIso8601String(),
+        'previous_interval': previousInterval,
+        'next_interval': schedule.interval,
+        'due_at': schedule.dueAt.toIso8601String(),
+      });
+    });
+  }
+
+  @override
+  Future<List<ChallengeReview>> getReviewHistory(String challengeId) async {
+    final rows = await database.query(
+      'challenge_reviews',
+      where: 'challenge_id = ?',
+      whereArgs: [challengeId],
+      orderBy: 'reviewed_at DESC',
+    );
+    return rows.map(_reviewFromRow).toList(growable: false);
+  }
 
   Map<String, Object?> _toRow(Challenge item) => {
     'id': item.id,
@@ -88,6 +151,16 @@ class SqliteChallengeRepository implements ChallengeRepository {
     repetitions: row['repetitions'] as int? ?? 0,
     createdAt: DateTime.parse(row['created_at']! as String),
     updatedAt: DateTime.parse(row['updated_at']! as String),
+  );
+
+  ChallengeReview _reviewFromRow(Map<String, Object?> row) => ChallengeReview(
+    id: row['id']! as String,
+    challengeId: row['challenge_id']! as String,
+    rating: row['rating']! as String,
+    reviewedAt: DateTime.parse(row['reviewed_at']! as String),
+    previousInterval: row['previous_interval'] as int? ?? 0,
+    nextInterval: row['next_interval'] as int? ?? 0,
+    dueAt: DateTime.parse(row['due_at']! as String),
   );
 
   List<String> _list(Object? value) {
