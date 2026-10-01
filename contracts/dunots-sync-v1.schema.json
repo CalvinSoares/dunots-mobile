@@ -17,6 +17,7 @@
       "required": [
         "flashcards",
         "leetcode_problems",
+        "challenge_reviews",
         "articles",
         "snippets",
         "study_phases",
@@ -32,6 +33,7 @@
       "properties": {
         "flashcards": { "$ref": "#/$defs/records" },
         "leetcode_problems": { "$ref": "#/$defs/records" },
+        "challenge_reviews": { "$ref": "#/$defs/records" },
         "articles": { "$ref": "#/$defs/records" },
         "snippets": { "$ref": "#/$defs/records" },
         "study_phases": { "$ref": "#/$defs/records" },

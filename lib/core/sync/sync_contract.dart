@@ -5,6 +5,7 @@ abstract final class SyncCollections {
   static const all = <String>[
     flashcards,
     leetcodeProblems,
+    challengeReviews,
     articles,
     snippets,
     studyPhases,
@@ -20,6 +21,7 @@ abstract final class SyncCollections {
 
   static const flashcards = 'flashcards';
   static const leetcodeProblems = 'leetcode_problems';
+  static const challengeReviews = 'challenge_reviews';
   static const articles = 'articles';
   static const snippets = 'snippets';
   static const studyPhases = 'study_phases';
