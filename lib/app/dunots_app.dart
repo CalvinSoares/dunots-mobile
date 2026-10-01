@@ -11,6 +11,7 @@ import '../features/roadmaps/data/study_material_repository.dart';
 import '../features/roadmaps/data/study_track_repository.dart';
 import '../features/challenges/data/challenge_repository.dart';
 import '../features/diagrams/data/diagram_repository.dart';
+import '../features/study/data/study_phase_repository.dart';
 import '../core/notifications/local_notification_service.dart';
 import '../core/sync/sync_database_repository.dart';
 import 'dunots_theme.dart';
@@ -31,6 +32,7 @@ class DunotsMobileApp extends StatelessWidget {
   final SyncDatabaseRepository? syncRepository;
   final ChallengeRepository? challengeRepository;
   final DiagramRepository? diagramRepository;
+  final StudyPhaseRepository? phaseRepository;
 
   const DunotsMobileApp({
     super.key,
@@ -47,6 +49,7 @@ class DunotsMobileApp extends StatelessWidget {
     this.syncRepository,
     this.challengeRepository,
     this.diagramRepository,
+    this.phaseRepository,
   });
 
   @override
@@ -70,6 +73,7 @@ class DunotsMobileApp extends StatelessWidget {
         syncRepository: syncRepository,
         challengeRepository: challengeRepository,
         diagramRepository: diagramRepository,
+        phaseRepository: phaseRepository,
       ),
     );
   }

@@ -20,6 +20,7 @@ import '../core/sync/sync_dialog.dart';
 import '../features/challenges/data/challenge_repository.dart';
 import '../features/challenges/challenges_preview_page.dart';
 import '../features/diagrams/data/diagram_repository.dart';
+import '../features/study/data/study_phase_repository.dart';
 import '../features/diagrams/diagrams_preview_page.dart';
 
 class DunotsHomeShell extends StatefulWidget {
@@ -37,6 +38,7 @@ class DunotsHomeShell extends StatefulWidget {
   final SyncDatabaseRepository? syncRepository;
   final ChallengeRepository? challengeRepository;
   final DiagramRepository? diagramRepository;
+  final StudyPhaseRepository? phaseRepository;
 
   const DunotsHomeShell({
     super.key,
@@ -53,6 +55,7 @@ class DunotsHomeShell extends StatefulWidget {
     this.syncRepository,
     this.challengeRepository,
     this.diagramRepository,
+    this.phaseRepository,
   });
 
   @override
@@ -76,8 +79,11 @@ class _DunotsHomeShellState extends State<DunotsHomeShell> {
         trackRepository: widget.trackRepository,
         questionRepository: widget.questionRepository,
         attemptRepository: widget.attemptRepository,
+        challengeRepository: widget.challengeRepository,
+        phaseRepository: widget.phaseRepository,
         localNotificationService: widget.localNotificationService,
         onOpenFlashcards: () => _selectTab(1),
+        onOpenChallenges: () => _selectTab(2),
         onOpenQuestions: () => _selectTab(3),
       ),
       FlashcardsPreviewPage(
@@ -104,6 +110,7 @@ class _DunotsHomeShellState extends State<DunotsHomeShell> {
         flashcardRepository: widget.flashcardRepository,
         questionRepository: widget.questionRepository,
         attemptRepository: widget.attemptRepository,
+        diagramRepository: widget.diagramRepository,
       ),
       const MorePage(),
     ];

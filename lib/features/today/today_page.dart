@@ -5,6 +5,13 @@ import '../../core/models/flashcard_review_preferences.dart';
 import '../flashcards/data/flashcard_repository.dart';
 import '../flashcards/data/flashcard_review_preferences_repository.dart';
 import '../flashcards/data/flashcard_session_repository.dart';
+import '../challenges/data/challenge_repository.dart';
+import '../challenges/domain/challenge.dart';
+import '../study/mixed_study_session_page.dart';
+import '../study/data/study_phase_repository.dart';
+import '../study/domain/study_phase.dart';
+import '../study/study_phase_details_page.dart';
+import '../study/study_phase_form_dialog.dart';
 import '../questions/data/question_repository.dart';
 import '../quizzes/data/quiz_attempt_repository.dart';
 import '../quizzes/domain/quiz_attempt.dart';
@@ -24,7 +31,10 @@ class TodayPage extends StatefulWidget {
   final QuizAttemptRepository? attemptRepository;
   final VoidCallback? onOpenFlashcards;
   final VoidCallback? onOpenQuestions;
+  final VoidCallback? onOpenChallenges;
   final LocalNotificationService? localNotificationService;
+  final ChallengeRepository? challengeRepository;
+  final StudyPhaseRepository? phaseRepository;
 
   const TodayPage({
     super.key,
@@ -36,7 +46,10 @@ class TodayPage extends StatefulWidget {
     this.attemptRepository,
     this.onOpenFlashcards,
     this.onOpenQuestions,
+    this.onOpenChallenges,
     this.localNotificationService,
+    this.challengeRepository,
+    this.phaseRepository,
   });
 
   @override
@@ -46,12 +59,14 @@ class TodayPage extends StatefulWidget {
 class _TodayPageState extends State<TodayPage> {
   late Future<_TodayData> _dataFuture;
   late final LocalNotificationService _notificationService;
+  late final StudyPhaseRepository _phaseRepository;
 
   @override
   void initState() {
     super.initState();
     _notificationService =
         widget.localNotificationService ?? const NoopLocalNotificationService();
+    _phaseRepository = widget.phaseRepository ?? InMemoryStudyPhaseRepository();
     _dataFuture = _loadData();
   }
 
@@ -60,6 +75,12 @@ class _TodayPageState extends State<TodayPage> {
         await (widget.flashcardRepository ?? InMemoryFlashcardRepository())
             .getAll();
     final now = DateTime.now();
+    final challenges =
+        await (widget.challengeRepository ?? InMemoryChallengeRepository())
+            .getAll();
+    final dueChallenges = challenges
+        .where((challenge) => challenge.isDueAt(now))
+        .length;
     final dueCount = cards.where((card) => card.isDueAt(now)).length;
     final sessions =
         await (widget.flashcardSessionRepository ??
@@ -72,6 +93,7 @@ class _TodayPageState extends State<TodayPage> {
     final tracks =
         await (widget.trackRepository ?? InMemoryStudyTrackRepository())
             .getAll();
+    final phases = await _phaseRepository.getAll();
     final attempts =
         await (widget.attemptRepository ?? InMemoryQuizAttemptRepository())
             .getAll();
@@ -94,6 +116,9 @@ class _TodayPageState extends State<TodayPage> {
       dueCount: dueCount,
       completedToday: completedToday,
       preferences: preferences,
+      challenges: challenges,
+      dueChallenges: dueChallenges,
+      phases: phases,
     );
   }
 
@@ -177,6 +202,15 @@ class _TodayPageState extends State<TodayPage> {
                         const SizedBox(width: 12),
                         Expanded(
                           child: MetricCard(
+                            label: 'desafios vencidos',
+                            value: '${data.dueChallenges}',
+                            icon: Icons.code_outlined,
+                            color: const Color(0xFF7FD6B2),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: MetricCard(
                             label: 'trilhas ativas',
                             value: '${data.tracks.length}',
                             icon: Icons.route_outlined,
@@ -219,11 +253,22 @@ class _TodayPageState extends State<TodayPage> {
                           ],
                         ),
                         const SizedBox(height: 12),
-                        MetricCard(
-                          label: 'simulados em andamento',
-                          value: '${data.inProgress.length}',
-                          icon: Icons.assignment_outlined,
-                          color: const Color(0xFFFFC857),
+                        Expanded(
+                          child: MetricCard(
+                            label: 'simulados em andamento',
+                            value: '${data.inProgress.length}',
+                            icon: Icons.assignment_outlined,
+                            color: const Color(0xFFFFC857),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: MetricCard(
+                            label: 'desafios vencidos',
+                            value: '${data.dueChallenges}',
+                            icon: Icons.code_outlined,
+                            color: const Color(0xFF7FD6B2),
+                          ),
                         ),
                       ],
                     ),
@@ -235,11 +280,30 @@ class _TodayPageState extends State<TodayPage> {
                   ),
                   const SizedBox(height: 12),
                   QuickAction(
+                    icon: Icons.auto_awesome_motion_outlined,
+                    title: 'Iniciar estudo misto',
+                    subtitle:
+                        '${data.cards.length} flashcards · ${data.challenges.length} desafios disponíveis',
+                    color: const Color(0xFFB79BFF),
+                    onTap: () => _openMixedStudy(data),
+                  ),
+                  const SizedBox(height: 10),
+                  QuickAction(
                     icon: Icons.style_outlined,
                     title: 'Abrir flashcards',
                     subtitle: '${data.cards.length} cartões cadastrados',
                     color: const Color(0xFFFF7168),
                     onTap: widget.onOpenFlashcards,
+                  ),
+                  const SizedBox(height: 10),
+                  QuickAction(
+                    icon: Icons.code_outlined,
+                    title: 'Abrir desafios',
+                    subtitle: data.dueChallenges == 0
+                        ? '${data.challenges.length} desafios cadastrados'
+                        : '${data.dueChallenges} desafio(s) aguardam revisão',
+                    color: const Color(0xFF7FD6B2),
+                    onTap: widget.onOpenChallenges,
                   ),
                   const SizedBox(height: 10),
                   QuickAction(
@@ -255,6 +319,37 @@ class _TodayPageState extends State<TodayPage> {
                         ? widget.onOpenQuestions
                         : () => _openAttempt(firstAttempt),
                   ),
+                  const SizedBox(height: 26),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'fases de estudo',
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w700),
+                      ),
+                      TextButton.icon(
+                        onPressed: () => _createPhase(data),
+                        icon: const Icon(Icons.add),
+                        label: const Text('Nova fase'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  if (data.phases.isEmpty)
+                    const ExampleListTile(
+                      title: 'Nenhuma fase criada',
+                      detail: 'Agrupe flashcards e desafios para estudar por objetivo.',
+                    )
+                  else
+                    ...data.phases.asMap().entries.map(
+                      (entry) => _buildPhaseCard(
+                        context,
+                        data,
+                        entry.value,
+                        entry.key,
+                      ),
+                    ),
                   const SizedBox(height: 26),
                   Text(
                     'trilhas em andamento',
@@ -392,6 +487,157 @@ class _TodayPageState extends State<TodayPage> {
       });
     }
   }
+
+  Future<void> _openMixedStudy(_TodayData data) async {
+    final now = DateTime.now();
+    final dueCards = data.cards.where((card) => card.isDueAt(now)).toList();
+    final dueChallenges = data.challenges
+        .where((challenge) => challenge.isDueAt(now))
+        .toList();
+    final cards = dueCards.isEmpty ? data.cards : dueCards;
+    final challenges = dueChallenges.isEmpty ? data.challenges : dueChallenges;
+    if (cards.isEmpty && challenges.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Nenhum item disponível para estudar.')),
+      );
+      return;
+    }
+    final flashcardRepository =
+        widget.flashcardRepository ??
+        InMemoryFlashcardRepository(cards: data.cards);
+    final challengeRepository =
+        widget.challengeRepository ??
+        InMemoryChallengeRepository(items: data.challenges);
+    final sessionRepository =
+        widget.flashcardSessionRepository ??
+        InMemoryFlashcardSessionRepository();
+    final reviewed = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => MixedStudySessionPage(
+          cards: cards,
+          challenges: challenges,
+          flashcardRepository: flashcardRepository,
+          challengeRepository: challengeRepository,
+          sessionRepository: sessionRepository,
+        ),
+      ),
+    );
+    if (reviewed == true && mounted) {
+      setState(() {
+        _dataFuture = _loadData();
+      });
+    }
+  }
+
+  Widget _buildPhaseCard(
+    BuildContext context,
+    _TodayData data,
+    StudyPhase phase,
+    int index,
+  ) {
+    final progress = phase.progress(
+      flashcards: data.cards,
+      challenges: data.challenges,
+    );
+    final completed = phase.completedItems(
+      flashcards: data.cards,
+      challenges: data.challenges,
+    );
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      child: ListTile(
+        onTap: () => _openPhase(phase),
+        leading: const Icon(Icons.layers_outlined),
+        title: Text(phase.title),
+        subtitle: Text(
+          '$completed/${phase.totalItems} concluídos · ${phase.flashcardIds.length} flashcards · ${phase.challengeIds.length} desafios',
+        ),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              tooltip: 'Mover fase para cima',
+              onPressed: index == 0 ? null : () => _movePhase(data, index, -1),
+              icon: const Icon(Icons.arrow_upward),
+            ),
+            IconButton(
+              tooltip: 'Mover fase para baixo',
+              onPressed: index == data.phases.length - 1
+                  ? null
+                  : () => _movePhase(data, index, 1),
+              icon: const Icon(Icons.arrow_downward),
+            ),
+            SizedBox(
+              width: 70,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text('${(progress * 100).round()}%'),
+                  const SizedBox(height: 4),
+                  LinearProgressIndicator(value: progress),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _movePhase(_TodayData data, int index, int delta) async {
+    final targetIndex = index + delta;
+    if (targetIndex < 0 || targetIndex >= data.phases.length) return;
+    final orderedIds = data.phases.map((phase) => phase.id).toList();
+    final moved = orderedIds.removeAt(index);
+    orderedIds.insert(targetIndex, moved);
+    await _phaseRepository.reorder(orderedIds);
+    if (mounted) {
+      setState(() {
+        _dataFuture = _loadData();
+      });
+    }
+  }
+
+  Future<void> _createPhase(_TodayData data) async {
+    final phase = await showDialog<StudyPhase>(
+      context: context,
+      builder: (_) => StudyPhaseFormDialog(
+        flashcards: data.cards,
+        challenges: data.challenges,
+      ),
+    );
+    if (phase == null) return;
+    await _phaseRepository.create(
+      phase.copyWith(sortOrder: data.phases.length),
+    );
+    if (mounted) {
+      setState(() {
+        _dataFuture = _loadData();
+      });
+    }
+  }
+
+  Future<void> _openPhase(StudyPhase phase) async {
+    final flashcardRepository =
+        widget.flashcardRepository ?? InMemoryFlashcardRepository();
+    final challengeRepository =
+        widget.challengeRepository ?? InMemoryChallengeRepository();
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => StudyPhaseDetailsPage(
+          phase: phase,
+          phaseRepository: _phaseRepository,
+          flashcardRepository: flashcardRepository,
+          challengeRepository: challengeRepository,
+        ),
+      ),
+    );
+    if (mounted) {
+      setState(() {
+        _dataFuture = _loadData();
+      });
+    }
+  }
 }
 
 class _TodayData {
@@ -401,6 +647,9 @@ class _TodayData {
   final int dueCount;
   final int completedToday;
   final FlashcardReviewPreferences preferences;
+  final List<Challenge> challenges;
+  final int dueChallenges;
+  final List<StudyPhase> phases;
 
   const _TodayData({
     required this.cards,
@@ -409,6 +658,9 @@ class _TodayData {
     required this.dueCount,
     required this.completedToday,
     required this.preferences,
+    required this.challenges,
+    required this.dueChallenges,
+    required this.phases,
   });
 }
 
