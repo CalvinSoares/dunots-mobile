@@ -12,7 +12,7 @@ class AppDatabase {
         path.join(await getDatabasesPath(), 'dunots.db');
     final database = await openDatabase(
       databasePath,
-      version: 25,
+      version: 28,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
       },
@@ -23,7 +23,9 @@ class AppDatabase {
             title TEXT NOT NULL,
             description TEXT NOT NULL,
             completed_items INTEGER NOT NULL DEFAULT 0,
-            total_items INTEGER NOT NULL DEFAULT 0
+            total_items INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL DEFAULT '',
+            updated_at TEXT NOT NULL DEFAULT ''
           )
         ''');
         await database.execute('''
@@ -37,6 +39,8 @@ class AppDatabase {
             is_completed INTEGER NOT NULL DEFAULT 0,
             notes TEXT NOT NULL DEFAULT '',
             priority INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL DEFAULT '',
+            updated_at TEXT NOT NULL DEFAULT '',
             FOREIGN KEY (track_id) REFERENCES study_tracks(id) ON DELETE CASCADE,
             FOREIGN KEY (parent_id) REFERENCES study_nodes(id) ON DELETE CASCADE
           )
@@ -48,6 +52,8 @@ class AppDatabase {
           'CREATE INDEX study_nodes_parent_index ON study_nodes(parent_id)',
         );
         await _createMaterialLinksTable(database);
+        await _createStudyDocumentsTable(database);
+        await _createStudyMaterialProgressTable(database);
         await _createFlashcardsTable(database);
         await _createFlashcardSessionsTable(database);
         await _createFlashcardReviewPreferencesTable(database);
@@ -261,6 +267,54 @@ class AppDatabase {
             'ON study_phases(sort_order ASC, updated_at DESC)',
           );
         }
+        if (oldVersion < 26) {
+          await _addColumnIfMissing(
+            database,
+            'study_tracks',
+            "created_at TEXT NOT NULL DEFAULT ''",
+          );
+          await _addColumnIfMissing(
+            database,
+            'study_tracks',
+            "updated_at TEXT NOT NULL DEFAULT ''",
+          );
+          await _addColumnIfMissing(
+            database,
+            'study_nodes',
+            "created_at TEXT NOT NULL DEFAULT ''",
+          );
+          await _addColumnIfMissing(
+            database,
+            'study_nodes',
+            "updated_at TEXT NOT NULL DEFAULT ''",
+          );
+          await _addColumnIfMissing(
+            database,
+            'study_node_materials',
+            "updated_at TEXT NOT NULL DEFAULT ''",
+          );
+          final timestamp = "strftime('%Y-%m-%dT%H:%M:%fZ', 'now')";
+          await database.execute(
+            "UPDATE study_tracks SET created_at = $timestamp, "
+            "updated_at = $timestamp "
+            "WHERE created_at = '' OR updated_at = ''",
+          );
+          await database.execute(
+            "UPDATE study_nodes SET created_at = $timestamp, "
+            "updated_at = $timestamp "
+            "WHERE created_at = '' OR updated_at = ''",
+          );
+          await database.execute(
+            "UPDATE study_node_materials SET updated_at = $timestamp "
+            "WHERE updated_at = ''",
+          );
+        }
+        if (oldVersion < 27) {
+          await _createStudyDocumentsTable(database);
+        }
+        if (oldVersion < 28) {
+          await _createStudyMaterialProgressTable(database);
+        }
       },
     );
 
@@ -286,10 +340,51 @@ class AppDatabase {
         node_id TEXT NOT NULL,
         material_id TEXT NOT NULL,
         material_type TEXT NOT NULL,
+        updated_at TEXT NOT NULL DEFAULT '',
         PRIMARY KEY (node_id, material_id, material_type),
         FOREIGN KEY (node_id) REFERENCES study_nodes(id) ON DELETE CASCADE
       )
     ''');
+  }
+
+  static Future<void> _createStudyDocumentsTable(Database database) async {
+    await database.execute('''
+      CREATE TABLE IF NOT EXISTS study_documents (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        file_name TEXT NOT NULL,
+        file_path TEXT NOT NULL,
+        mime_type TEXT NOT NULL,
+        byte_size INTEGER NOT NULL DEFAULT 0,
+        imported_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
+    await database.execute(
+      'CREATE INDEX IF NOT EXISTS study_documents_updated_index '
+      'ON study_documents(updated_at DESC)',
+    );
+  }
+
+  static Future<void> _createStudyMaterialProgressTable(
+    Database database,
+  ) async {
+    await database.execute('''
+      CREATE TABLE IF NOT EXISTS study_material_progress (
+        node_id TEXT NOT NULL,
+        material_id TEXT NOT NULL,
+        material_type TEXT NOT NULL,
+        completed_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (node_id, material_id, material_type),
+        FOREIGN KEY (node_id) REFERENCES study_nodes(id) ON DELETE CASCADE
+      )
+    ''');
+    await database.execute(
+      'CREATE INDEX IF NOT EXISTS study_material_progress_node_index '
+      'ON study_material_progress(node_id, updated_at DESC)',
+    );
   }
 
   static Future<void> _createFlashcardsTable(Database database) async {

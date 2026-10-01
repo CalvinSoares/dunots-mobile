@@ -4,6 +4,8 @@ class StudyTrack {
   final String description;
   final int completedItems;
   final int totalItems;
+  final DateTime? createdAt;
+  final DateTime? updatedAt;
 
   const StudyTrack({
     required this.id,
@@ -11,6 +13,8 @@ class StudyTrack {
     required this.description,
     required this.completedItems,
     required this.totalItems,
+    this.createdAt,
+    this.updatedAt,
   });
 
   double get progress {
@@ -28,6 +32,8 @@ class StudyTrack {
     String? description,
     int? completedItems,
     int? totalItems,
+    DateTime? createdAt,
+    DateTime? updatedAt,
   }) {
     return StudyTrack(
       id: id,
@@ -35,6 +41,8 @@ class StudyTrack {
       description: description ?? this.description,
       completedItems: completedItems ?? this.completedItems,
       totalItems: totalItems ?? this.totalItems,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
     );
   }
 }

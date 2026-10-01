@@ -10,6 +10,8 @@ class StudyNode {
   final bool isCompleted;
   final String notes;
   final StudyPriority priority;
+  final DateTime? createdAt;
+  final DateTime? updatedAt;
 
   const StudyNode({
     required this.id,
@@ -21,6 +23,8 @@ class StudyNode {
     this.isCompleted = false,
     this.notes = '',
     this.priority = StudyPriority.none,
+    this.createdAt,
+    this.updatedAt,
   });
 
   StudyNode copyWith({
@@ -30,6 +34,8 @@ class StudyNode {
     bool? isCompleted,
     String? notes,
     StudyPriority? priority,
+    DateTime? createdAt,
+    DateTime? updatedAt,
   }) {
     return StudyNode(
       id: id,
@@ -41,6 +47,8 @@ class StudyNode {
       isCompleted: isCompleted ?? this.isCompleted,
       notes: notes ?? this.notes,
       priority: priority ?? this.priority,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
     );
   }
 }
