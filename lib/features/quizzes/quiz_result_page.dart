@@ -7,6 +7,7 @@ import 'data/quiz_attempt_repository.dart';
 import 'domain/quiz_attempt.dart';
 import 'domain/quiz_attempt_result.dart';
 import 'quiz_attempt_page.dart';
+import 'quiz_pdf_export_service.dart';
 
 class QuizResultPage extends StatefulWidget {
   final QuizAttempt attempt;
@@ -105,6 +106,15 @@ class _QuizResultPageState extends State<QuizResultPage> {
                 widget.attempt.title,
                 style: Theme.of(context).textTheme.headlineSmall
                     ?.copyWith(fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 10),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: OutlinedButton.icon(
+                  onPressed: () => _exportResult(attemptQuestions),
+                  icon: const Icon(Icons.picture_as_pdf_outlined),
+                  label: const Text('Exportar resultado em PDF'),
+                ),
               ),
               const SizedBox(height: 20),
               Card(
@@ -251,6 +261,40 @@ class _QuizResultPageState extends State<QuizResultPage> {
 
   void _reload() {
     _questionsFuture = widget.questionRepository.getAll();
+  }
+
+  Future<void> _exportResult(Iterable<Question> questions) async {
+    try {
+      const service = QuizPdfExportService();
+      final bytes = await service.exportResult(
+        attempt: widget.attempt,
+        questions: questions,
+      );
+      final uri = await service.savePdf(
+        bytes,
+        fileName:
+            'dunots-resultado-${DateTime.now().millisecondsSinceEpoch}.pdf',
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              uri == null
+                  ? 'Exportação cancelada.'
+                  : 'Resultado exportado para ${uri.toString()}',
+            ),
+          ),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Não foi possível exportar o resultado: $error'),
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _showReviewDialog(String title, List<Question> questions) async {
