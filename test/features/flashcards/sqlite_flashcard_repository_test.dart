@@ -37,7 +37,7 @@ void main() {
     expect(saved.linkedMaterialIds, card.linkedMaterialIds);
 
     final reviewedAt = DateTime(2026, 9, 30, 10);
-    final dueAt = DateTime(2026, 10, 3, 10);
+    final dueAt = DateTime(2026, 10, 4, 10);
     await repository.recordReview(
       cardId: card.id,
       rating: 'fácil',
@@ -50,6 +50,9 @@ void main() {
     expect(reviewed.lastRating, 'fácil');
     expect(reviewed.lastReviewedAt, reviewedAt);
     expect(reviewed.dueAt, dueAt);
+    expect(reviewed.interval, 4);
+    expect(reviewed.repetitions, 1);
+    expect(reviewed.easeFactor, 2.65);
 
     final updated = reviewed.copyWith(
       front: 'O que é um segmento?',

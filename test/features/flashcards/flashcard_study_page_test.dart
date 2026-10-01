@@ -76,7 +76,7 @@ void main() {
   test('repositório em memória persiste a classificação', () async {
     final repository = InMemoryFlashcardRepository(cards: [card]);
     final reviewedAt = DateTime(2026, 9, 30, 10);
-    final dueAt = DateTime(2026, 10, 3, 10);
+    final dueAt = DateTime(2026, 10, 4, 10);
 
     await repository.recordReview(
       cardId: card.id,
@@ -90,6 +90,9 @@ void main() {
     expect(saved.lastRating, 'fácil');
     expect(saved.lastReviewedAt, reviewedAt);
     expect(saved.dueAt, dueAt);
+    expect(saved.interval, 4);
+    expect(saved.repetitions, 1);
+    expect(saved.easeFactor, 2.65);
   });
 
   testWidgets('exibe materiais relacionados depois do acerto', (tester) async {
