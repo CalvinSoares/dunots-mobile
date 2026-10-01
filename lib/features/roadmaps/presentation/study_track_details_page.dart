@@ -1,7 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 
 import '../../questions/data/question_repository.dart';
 import '../../questions/domain/question.dart';
+import '../../questions/question_details_page.dart';
+import '../../flashcards/data/flashcard_repository.dart';
+import '../../flashcards/flashcard_details_page.dart';
+import '../../challenges/data/challenge_repository.dart';
+import '../../challenges/challenge_details_page.dart';
+import '../../challenges/challenge_study_session_page.dart';
 import '../../quizzes/data/quiz_attempt_repository.dart';
 import '../../quizzes/domain/quiz_attempt.dart';
 import '../../quizzes/quiz_attempt_page.dart';
@@ -11,6 +18,9 @@ import '../data/study_node_repository.dart';
 import '../data/study_track_repository.dart';
 import '../domain/study_node.dart';
 import '../domain/study_material.dart';
+import '../data/study_document_repository.dart';
+import '../data/study_material_progress_repository.dart';
+import 'study_document_viewer_page.dart';
 import '../domain/study_track.dart';
 import '../../diagrams/data/diagram_repository.dart';
 import '../../diagrams/diagram_viewer_page.dart';
@@ -25,6 +35,10 @@ class StudyTrackDetailsPage extends StatefulWidget {
   final StudyMaterialRepository? materialRepository;
   final StudyNodeMaterialRepository? materialLinkRepository;
   final QuestionRepository? questionRepository;
+  final FlashcardRepository? flashcardRepository;
+  final ChallengeRepository? challengeRepository;
+  final StudyDocumentRepository? documentRepository;
+  final StudyMaterialProgressRepository? materialProgressRepository;
   final QuizAttemptRepository? attemptRepository;
   final DiagramRepository? diagramRepository;
 
@@ -36,6 +50,10 @@ class StudyTrackDetailsPage extends StatefulWidget {
     this.materialRepository,
     this.materialLinkRepository,
     this.questionRepository,
+    this.flashcardRepository,
+    this.challengeRepository,
+    this.documentRepository,
+    this.materialProgressRepository,
     this.attemptRepository,
     this.diagramRepository,
   });
@@ -51,7 +69,9 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
   late final QuestionRepository _questionRepository;
   late final QuizAttemptRepository _attemptRepository;
   late final DiagramRepository _diagramRepository;
+  late final StudyMaterialProgressRepository _materialProgressRepository;
   final Map<String, List<StudyMaterialLink>> _linksByNode = {};
+  final Map<String, Set<String>> _completedMaterialKeysByNode = {};
   String _searchQuery = '';
   StudyPriority? _priorityFilter;
   StudyNodeCompletionFilter _completionFilter = StudyNodeCompletionFilter.all;
@@ -73,6 +93,9 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
         widget.attemptRepository ?? InMemoryQuizAttemptRepository();
     _diagramRepository =
         widget.diagramRepository ?? InMemoryDiagramRepository();
+    _materialProgressRepository =
+        widget.materialProgressRepository ??
+        InMemoryStudyMaterialProgressRepository();
     _loadNodes();
   }
 
@@ -90,11 +113,10 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
         return Scaffold(
           appBar: AppBar(title: Text(widget.track.title)),
           body: SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final compact = constraints.maxHeight < 560;
+                final header = [
                   Text(
                     widget.track.description,
                     style: const TextStyle(color: Color(0xFFB6B7AD)),
@@ -124,9 +146,27 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
                   const SizedBox(height: 18),
                   _buildFilters(),
                   const SizedBox(height: 18),
-                  Expanded(child: _buildContent(context)),
-                ],
-              ),
+                ];
+                if (compact) {
+                  return ListView(
+                    padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
+                    children: [
+                      ...header,
+                      _buildContent(context, compact: true),
+                    ],
+                  );
+                }
+                return Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      ...header,
+                      Expanded(child: _buildContent(context)),
+                    ],
+                  ),
+                );
+              },
             ),
           ),
         );
@@ -134,7 +174,7 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
     );
   }
 
-  Widget _buildContent(BuildContext context) {
+  Widget _buildContent(BuildContext context, {bool compact = false}) {
     final state = _controller.state;
     final visibleNodes = StudyNodeFilters.apply(
       nodes: state.nodes,
@@ -148,6 +188,15 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
       case StudyNodesStatus.loading:
         return const Center(child: CircularProgressIndicator());
       case StudyNodesStatus.empty:
+        if (compact) {
+          return Column(
+            children: [
+              _buildProgress(state.nodes),
+              const SizedBox(height: 20),
+              const Text('Nenhum tópico cadastrado ainda.'),
+            ],
+          );
+        }
         return Column(
           children: [
             _buildProgress(state.nodes),
@@ -171,6 +220,26 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
           ),
         );
       case StudyNodesStatus.data:
+        if (compact) {
+          final rows = _flattenNodeTree(visibleNodes);
+          return Column(
+            children: [
+              _buildProgress(state.nodes),
+              const SizedBox(height: 14),
+              if (visibleNodes.isEmpty)
+                const Text('Nenhum tópico corresponde aos filtros.')
+              else
+                ...rows.map(
+                  (row) => _buildNodeCard(
+                    context,
+                    row.node,
+                    row.depth,
+                    visibleNodes,
+                  ),
+                ),
+            ],
+          );
+        }
         return Column(
           children: [
             _buildProgress(state.nodes),
@@ -180,7 +249,24 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
                   ? const Center(
                       child: Text('Nenhum tópico corresponde aos filtros.'),
                     )
-                  : ListView(children: _buildNodeTree(visibleNodes)),
+                  : Builder(
+                      builder: (context) {
+                        final rows = _flattenNodeTree(visibleNodes);
+                        return ListView.builder(
+                          scrollCacheExtent: ScrollCacheExtent.pixels(1200),
+                          itemCount: rows.length,
+                          itemBuilder: (context, index) {
+                            final row = rows[index];
+                            return _buildNodeCard(
+                              context,
+                              row.node,
+                              row.depth,
+                              visibleNodes,
+                            );
+                          },
+                        );
+                      },
+                    ),
             ),
           ],
         );
@@ -201,57 +287,67 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
           ),
         ),
         const SizedBox(height: 10),
-        Row(
-          children: [
-            Expanded(
-              child: DropdownButtonFormField<StudyPriority?>(
-                initialValue: _priorityFilter,
-                decoration: const InputDecoration(labelText: 'Prioridade'),
-                items: [
-                  const DropdownMenuItem<StudyPriority?>(
-                    value: null,
-                    child: Text('Todas'),
-                  ),
-                  ...StudyPriority.values
-                      .where((priority) => priority != StudyPriority.none)
-                      .map(
-                        (priority) => DropdownMenuItem<StudyPriority?>(
-                          value: priority,
-                          child: Text(_priorityLabel(priority)),
-                        ),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final width = constraints.maxWidth < 540
+                ? constraints.maxWidth
+                : (constraints.maxWidth - 10) / 2;
+            return Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                SizedBox(
+                  width: width,
+                  child: DropdownButtonFormField<StudyPriority?>(
+                    initialValue: _priorityFilter,
+                    decoration: const InputDecoration(labelText: 'Prioridade'),
+                    items: [
+                      const DropdownMenuItem<StudyPriority?>(
+                        value: null,
+                        child: Text('Todas'),
                       ),
-                ],
-                onChanged: (priority) =>
-                    setState(() => _priorityFilter = priority),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: DropdownButtonFormField<StudyNodeCompletionFilter>(
-                initialValue: _completionFilter,
-                decoration: const InputDecoration(labelText: 'Status'),
-                items: const [
-                  DropdownMenuItem(
-                    value: StudyNodeCompletionFilter.all,
-                    child: Text('Todos'),
+                      ...StudyPriority.values
+                          .where((priority) => priority != StudyPriority.none)
+                          .map(
+                            (priority) => DropdownMenuItem<StudyPriority?>(
+                              value: priority,
+                              child: Text(_priorityLabel(priority)),
+                            ),
+                          ),
+                    ],
+                    onChanged: (priority) =>
+                        setState(() => _priorityFilter = priority),
                   ),
-                  DropdownMenuItem(
-                    value: StudyNodeCompletionFilter.pending,
-                    child: Text('Pendentes'),
+                ),
+                SizedBox(
+                  width: width,
+                  child: DropdownButtonFormField<StudyNodeCompletionFilter>(
+                    initialValue: _completionFilter,
+                    decoration: const InputDecoration(labelText: 'Status'),
+                    items: const [
+                      DropdownMenuItem(
+                        value: StudyNodeCompletionFilter.all,
+                        child: Text('Todos'),
+                      ),
+                      DropdownMenuItem(
+                        value: StudyNodeCompletionFilter.pending,
+                        child: Text('Pendentes'),
+                      ),
+                      DropdownMenuItem(
+                        value: StudyNodeCompletionFilter.completed,
+                        child: Text('Concluídos'),
+                      ),
+                    ],
+                    onChanged: (filter) {
+                      if (filter != null) {
+                        setState(() => _completionFilter = filter);
+                      }
+                    },
                   ),
-                  DropdownMenuItem(
-                    value: StudyNodeCompletionFilter.completed,
-                    child: Text('Concluídos'),
-                  ),
-                ],
-                onChanged: (filter) {
-                  if (filter != null) {
-                    setState(() => _completionFilter = filter);
-                  }
-                },
-              ),
-            ),
-          ],
+                ),
+              ],
+            );
+          },
         ),
       ],
     );
@@ -264,8 +360,10 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        Wrap(
+          spacing: 8,
+          runSpacing: 4,
+          alignment: WrapAlignment.spaceBetween,
           children: [
             const Text(
               'Progresso',
@@ -280,6 +378,163 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
     );
   }
 
+  List<_VisibleNodeRow> _flattenNodeTree(List<StudyNode> nodes) {
+    final childrenByParent = <String?, List<StudyNode>>{};
+    for (final node in nodes) {
+      childrenByParent.putIfAbsent(node.parentId, () => []).add(node);
+    }
+    for (final children in childrenByParent.values) {
+      children.sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+    }
+
+    final rows = <_VisibleNodeRow>[];
+    void visit(String? parentId, int depth) {
+      for (final node in childrenByParent[parentId] ?? const <StudyNode>[]) {
+        rows.add(_VisibleNodeRow(node, depth));
+        visit(node.id, depth + 1);
+      }
+    }
+
+    visit(null, 0);
+    return rows;
+  }
+
+  Widget _buildNodeCard(
+    BuildContext context,
+    StudyNode node,
+    int depth,
+    List<StudyNode> visibleNodes,
+  ) {
+    final links = _linksByNode[node.id] ?? const <StudyMaterialLink>[];
+    return Padding(
+      padding: EdgeInsets.only(left: depth * 20.0, bottom: 10),
+      child: Semantics(
+        container: true,
+        label: 'Tópico ${node.title}',
+        checked: node.isCompleted,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
+          decoration: BoxDecoration(
+            color: const Color(0xFF292D2A),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xFF4A504B)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    depth == 0
+                        ? Icons.radio_button_unchecked
+                        : Icons.subdirectory_arrow_right,
+                    color: depth == 0
+                        ? const Color(0xFF78B8FF)
+                        : const Color(0xFFB79BFF),
+                  ),
+                  const SizedBox(width: 10),
+                  Semantics(
+                    label: 'Concluir tópico ${node.title}',
+                    child: Checkbox(
+                      value: node.isCompleted,
+                      onChanged: (_) => _toggleCompletion(node.id),
+                    ),
+                  ),
+                  if (node.priority != StudyPriority.none)
+                    _PriorityFlag(priority: node.priority),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          node.title,
+                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                        if (node.description.isNotEmpty) ...[
+                          const SizedBox(height: 3),
+                          Text(
+                            node.description,
+                            style: const TextStyle(
+                              color: Color(0xFFB6B7AD),
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                        if (node.notes.isNotEmpty) ...[
+                          const SizedBox(height: 3),
+                          Text(
+                            node.notes,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Color(0xFFB6B7AD),
+                              fontSize: 12,
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                        ],
+                        if (links.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            '${_completedMaterialKeysByNode[node.id]?.length ?? 0}/'
+                            '${links.length} materiais estudados',
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.primary,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              Align(
+                alignment: Alignment.centerRight,
+                child: _NodeActions(
+                  canMoveUp: _canMove(node, visibleNodes, direction: -1),
+                  canMoveDown: _canMove(node, visibleNodes, direction: 1),
+                  onAddChild: () => _showNodeDialog(context, parentId: node.id),
+                  onEdit: () => _showNodeDialog(context, node: node),
+                  onDelete: () => _confirmDelete(context, node),
+                  linkedMaterialsCount: links.length,
+                  linkedQuestionCount: links
+                      .where(
+                        (link) =>
+                            link.materialType == StudyMaterialType.question,
+                      )
+                      .length,
+                  onLinkMaterial: () => _showMaterialDialog(context, node),
+                  onOpenMaterials: () => _openLinkedMaterials(context, node),
+                  linkedDiagramCount: links
+                      .where(
+                        (link) =>
+                            link.materialType == StudyMaterialType.diagram,
+                      )
+                      .length,
+                  linkedChallengeCount: links
+                      .where(
+                        (link) =>
+                            link.materialType == StudyMaterialType.challenge,
+                      )
+                      .length,
+                  onOpenDiagram: () => _openLinkedDiagrams(context, node),
+                  onStartChallenges: () => _openLinkedChallenges(context, node),
+                  onStartQuiz: () => _startQuizFromNode(node),
+                  onMoveUp: () => _moveNode(node.id, direction: -1),
+                  onMoveDown: () => _moveNode(node.id, direction: 1),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Mantido temporariamente para compatibilidade durante a migração da árvore.
+  // ignore: unused_element
   List<Widget> _buildNodeTree(
     List<StudyNode> nodes, {
     String? parentId,
@@ -349,6 +604,18 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
                           ),
                         ),
                       ],
+                      if ((_linksByNode[node.id]?.isNotEmpty ?? false)) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          '${_completedMaterialKeysByNode[node.id]?.length ?? 0}/'
+                          '${_linksByNode[node.id]?.length ?? 0} materiais estudados',
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.primary,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -368,6 +635,7 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
                           .length ??
                       0,
                   onLinkMaterial: () => _showMaterialDialog(context, node),
+                  onOpenMaterials: () => _openLinkedMaterials(context, node),
                   linkedDiagramCount:
                       _linksByNode[node.id]
                           ?.where(
@@ -376,7 +644,17 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
                           )
                           .length ??
                       0,
+                  linkedChallengeCount:
+                      _linksByNode[node.id]
+                          ?.where(
+                            (link) =>
+                                link.materialType ==
+                                StudyMaterialType.challenge,
+                          )
+                          .length ??
+                      0,
                   onOpenDiagram: () => _openLinkedDiagrams(context, node),
+                  onStartChallenges: () => _openLinkedChallenges(context, node),
                   onStartQuiz: () => _startQuizFromNode(node),
                   onMoveUp: () => _moveNode(node.id, direction: -1),
                   onMoveDown: () => _moveNode(node.id, direction: 1),
@@ -415,9 +693,17 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
 
   Future<void> _loadLinks() async {
     final linksByNode = <String, List<StudyMaterialLink>>{};
+    final completedByNode = <String, Set<String>>{};
 
     for (final node in _controller.state.nodes) {
-      linksByNode[node.id] = await _materialLinkRepository.getForNode(node.id);
+      final links = await _materialLinkRepository.getForNode(node.id);
+      linksByNode[node.id] = links;
+      final completed = await _materialProgressRepository.getForNode(node.id);
+      completedByNode[node.id] = completed
+          .map(
+            (item) => _materialProgressKey(item.materialId, item.materialType),
+          )
+          .toSet();
     }
 
     if (mounted) {
@@ -425,8 +711,36 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
         _linksByNode
           ..clear()
           ..addAll(linksByNode);
+        _completedMaterialKeysByNode
+          ..clear()
+          ..addAll(completedByNode);
       });
     }
+  }
+
+  String _materialProgressKey(String materialId, StudyMaterialType type) =>
+      '$materialId:${type.name}';
+
+  Future<void> _markMaterialStudied(
+    StudyNode node,
+    StudyMaterial material,
+  ) async {
+    final link = StudyMaterialLink(
+      nodeId: node.id,
+      materialId: material.id,
+      materialType: material.type,
+    );
+    await _materialProgressRepository.markCompleted(link);
+    final links = _linksByNode[node.id] ?? const <StudyMaterialLink>[];
+    final allCompleted =
+        links.isNotEmpty &&
+        (await Future.wait(links.map(_materialProgressRepository.isCompleted)))
+            .every((completed) => completed);
+    if (allCompleted) {
+      await _controller.setCompletion(node.id, true);
+      await _syncTrackProgress();
+    }
+    await _loadLinks();
   }
 
   Future<void> _toggleCompletion(String nodeId) async {
@@ -508,6 +822,172 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
     await Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => DiagramViewerPage(diagram: selected)),
     );
+  }
+
+  Future<void> _openLinkedChallenges(
+    BuildContext context,
+    StudyNode node,
+  ) async {
+    final repository = widget.challengeRepository;
+    if (repository == null) return;
+    final links = (_linksByNode[node.id] ?? const [])
+        .where((link) => link.materialType == StudyMaterialType.challenge)
+        .toList(growable: false);
+    final challenges = await repository.getAll();
+    final linked = challenges
+        .where(
+          (challenge) => links.any((link) => link.materialId == challenge.id),
+        )
+        .toList(growable: false);
+    if (!context.mounted) return;
+    if (linked.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Nenhum desafio vinculado encontrado.')),
+      );
+      return;
+    }
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ChallengeStudySessionPage(
+          challenges: linked,
+          repository: repository,
+        ),
+      ),
+    );
+    if (mounted) await _loadLinks();
+  }
+
+  Future<void> _openLinkedMaterials(
+    BuildContext context,
+    StudyNode node,
+  ) async {
+    final links = _linksByNode[node.id] ?? const <StudyMaterialLink>[];
+    final catalog = await _materialRepository.getAll();
+    final linked = catalog
+        .where(
+          (material) => links.any(
+            (link) =>
+                link.materialId == material.id &&
+                link.materialType == material.type,
+          ),
+        )
+        .toList(growable: false);
+    if (!context.mounted) return;
+    if (linked.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Nenhum material vinculado encontrado.')),
+      );
+      return;
+    }
+    final selected = linked.length == 1
+        ? linked.first
+        : await showDialog<StudyMaterial>(
+            context: context,
+            builder: (_) => AlertDialog(
+              title: const Text('Abrir material vinculado'),
+              content: SizedBox(
+                width: double.maxFinite,
+                height: 420,
+                child: ListView.builder(
+                  itemCount: linked.length,
+                  itemBuilder: (context, index) {
+                    final material = linked[index];
+                    return ListTile(
+                      leading: Icon(_materialTypeIcon(material.type)),
+                      title: Text(material.title),
+                      subtitle: Text(
+                        '${_materialTypeLabel(material.type)} · ${material.subtitle}',
+                      ),
+                      onTap: () => Navigator.of(context).pop(material),
+                    );
+                  },
+                ),
+              ),
+            ),
+          );
+    if (selected == null || !context.mounted) return;
+    await _openMaterial(context, node, selected);
+  }
+
+  Future<void> _openMaterial(
+    BuildContext context,
+    StudyNode node,
+    StudyMaterial material,
+  ) async {
+    var studied = false;
+    switch (material.type) {
+      case StudyMaterialType.flashcard:
+        final repository = widget.flashcardRepository;
+        if (repository == null) return;
+        final card = (await repository.getAll())
+            .where((item) => item.id == material.id)
+            .firstOrNull;
+        if (card != null && context.mounted) {
+          studied =
+              await Navigator.of(context).push<bool>(
+                MaterialPageRoute(
+                  builder: (_) => FlashcardDetailsPage(
+                    card: card,
+                    flashcardRepository: repository,
+                    questionRepository: _questionRepository,
+                    materialRepository: _materialRepository,
+                  ),
+                ),
+              ) ??
+              false;
+        }
+      case StudyMaterialType.question:
+        final question = (await _questionRepository.getAll())
+            .where((item) => item.id == material.id)
+            .firstOrNull;
+        if (question != null && context.mounted) {
+          studied =
+              await Navigator.of(context).push<bool>(
+                MaterialPageRoute(
+                  builder: (_) => QuestionDetailsPage(question: question),
+                ),
+              ) ??
+              false;
+        }
+      case StudyMaterialType.challenge:
+        final repository = widget.challengeRepository;
+        if (repository == null) return;
+        final challenge = (await repository.getAll())
+            .where((item) => item.id == material.id)
+            .firstOrNull;
+        if (challenge != null && context.mounted) {
+          studied =
+              await Navigator.of(context).push<bool>(
+                MaterialPageRoute(
+                  builder: (_) => ChallengeDetailsPage(
+                    challenge: challenge,
+                    repository: repository,
+                  ),
+                ),
+              ) ??
+              false;
+        }
+      case StudyMaterialType.document:
+        final repository = widget.documentRepository;
+        if (repository == null) return;
+        final document = (await repository.getAll())
+            .where((item) => item.id == material.id)
+            .firstOrNull;
+        if (document != null && context.mounted) {
+          studied =
+              await Navigator.of(context).push<bool>(
+                MaterialPageRoute(
+                  builder: (_) => StudyDocumentViewerPage(document: document),
+                ),
+              ) ??
+              false;
+        }
+      case StudyMaterialType.diagram:
+        await _openLinkedDiagrams(context, node);
+    }
+    if (studied && context.mounted) {
+      await _markMaterialStudied(node, material);
+    }
   }
 
   Future<void> _startQuizFromNode(StudyNode node) async {
@@ -838,8 +1318,11 @@ class _NodeActions extends StatelessWidget {
   final int linkedMaterialsCount;
   final int linkedQuestionCount;
   final int linkedDiagramCount;
+  final int linkedChallengeCount;
   final VoidCallback onLinkMaterial;
+  final VoidCallback onOpenMaterials;
   final VoidCallback onOpenDiagram;
+  final VoidCallback onStartChallenges;
   final VoidCallback onStartQuiz;
 
   const _NodeActions({
@@ -853,8 +1336,11 @@ class _NodeActions extends StatelessWidget {
     required this.linkedMaterialsCount,
     required this.linkedQuestionCount,
     required this.linkedDiagramCount,
+    required this.linkedChallengeCount,
     required this.onLinkMaterial,
+    required this.onOpenMaterials,
     required this.onOpenDiagram,
+    required this.onStartChallenges,
     required this.onStartQuiz,
   });
 
@@ -863,8 +1349,10 @@ class _NodeActions extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Row(
-          mainAxisSize: MainAxisSize.min,
+        Wrap(
+          spacing: 0,
+          runSpacing: 0,
+          alignment: WrapAlignment.end,
           children: [
             IconButton(
               tooltip: 'Adicionar subtópico',
@@ -889,6 +1377,20 @@ class _NodeActions extends StatelessWidget {
                 label: Text('$linkedMaterialsCount'),
                 child: const Icon(Icons.link),
               ),
+            ),
+            IconButton(
+              tooltip: 'Estudar desafios vinculados',
+              onPressed: linkedChallengeCount == 0 ? null : onStartChallenges,
+              icon: Badge(
+                isLabelVisible: linkedChallengeCount > 0,
+                label: Text('$linkedChallengeCount'),
+                child: const Icon(Icons.code_outlined),
+              ),
+            ),
+            IconButton(
+              tooltip: 'Abrir material vinculado',
+              onPressed: linkedMaterialsCount == 0 ? null : onOpenMaterials,
+              icon: const Icon(Icons.open_in_new),
             ),
             IconButton(
               tooltip: 'Abrir fluxograma vinculado',
@@ -1171,6 +1673,13 @@ class _QuizSelectionSummaryDialogState
   }
 }
 
+class _VisibleNodeRow {
+  final StudyNode node;
+  final int depth;
+
+  const _VisibleNodeRow(this.node, this.depth);
+}
+
 class _TopicRow {
   final StudyNode node;
   final int depth;
@@ -1414,6 +1923,8 @@ String _materialTypeLabel(StudyMaterialType type) {
       return 'Flashcard';
     case StudyMaterialType.question:
       return 'Questão';
+    case StudyMaterialType.challenge:
+      return 'Desafio';
     case StudyMaterialType.document:
       return 'Material';
     case StudyMaterialType.diagram:
@@ -1427,6 +1938,8 @@ IconData _materialTypeIcon(StudyMaterialType type) {
       return Icons.style_outlined;
     case StudyMaterialType.question:
       return Icons.quiz_outlined;
+    case StudyMaterialType.challenge:
+      return Icons.code_outlined;
     case StudyMaterialType.document:
       return Icons.description_outlined;
     case StudyMaterialType.diagram:

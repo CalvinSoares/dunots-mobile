@@ -2,12 +2,16 @@ import 'package:flutter/material.dart';
 
 import '../flashcards/data/flashcard_repository.dart';
 import '../questions/data/question_repository.dart';
+import '../challenges/data/challenge_repository.dart';
 import '../quizzes/data/quiz_attempt_repository.dart';
 import '../../shared/widgets/study_widgets.dart';
 import 'data/study_material_catalog_repository.dart';
 import 'data/study_node_repository.dart';
 import 'data/study_material_repository.dart';
 import 'data/study_track_repository.dart';
+import 'data/study_document_repository.dart';
+import 'data/study_document_import_service.dart';
+import 'data/study_material_progress_repository.dart';
 import 'domain/study_track.dart';
 import 'presentation/study_tracks_controller.dart';
 import 'presentation/study_track_list_item.dart';
@@ -22,6 +26,9 @@ class RoadmapsPreviewPage extends StatefulWidget {
   final QuestionRepository? questionRepository;
   final QuizAttemptRepository? attemptRepository;
   final DiagramRepository? diagramRepository;
+  final ChallengeRepository? challengeRepository;
+  final StudyDocumentRepository? documentRepository;
+  final StudyMaterialProgressRepository? materialProgressRepository;
 
   const RoadmapsPreviewPage({
     super.key,
@@ -32,6 +39,9 @@ class RoadmapsPreviewPage extends StatefulWidget {
     this.questionRepository,
     this.attemptRepository,
     this.diagramRepository,
+    this.challengeRepository,
+    this.documentRepository,
+    this.materialProgressRepository,
   });
 
   @override
@@ -58,7 +68,9 @@ class _RoadmapsPreviewPageState extends State<RoadmapsPreviewPage> {
           widget.flashcardRepository ?? InMemoryFlashcardRepository(),
       questionRepository:
           widget.questionRepository ?? InMemoryQuestionRepository(),
+      challengeRepository: widget.challengeRepository,
       diagramRepository: widget.diagramRepository,
+      documentRepository: widget.documentRepository,
     );
     _controller.load();
   }
@@ -82,10 +94,22 @@ class _RoadmapsPreviewPageState extends State<RoadmapsPreviewPage> {
             children: [
               Align(
                 alignment: Alignment.centerRight,
-                child: FilledButton.icon(
-                  onPressed: () => _showCreateTrackDialog(context),
-                  icon: const Icon(Icons.add),
-                  label: const Text('Nova trilha'),
+                child: Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  alignment: WrapAlignment.end,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: () => _importDocument(context),
+                      icon: const Icon(Icons.upload_file_outlined),
+                      label: const Text('Importar material'),
+                    ),
+                    FilledButton.icon(
+                      onPressed: () => _showCreateTrackDialog(context),
+                      icon: const Icon(Icons.add),
+                      label: const Text('Nova trilha'),
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(height: 16),
@@ -134,15 +158,50 @@ class _RoadmapsPreviewPageState extends State<RoadmapsPreviewPage> {
           trackRepository: _controller.repository,
           materialLinkRepository: _materialLinkRepository,
           materialRepository: _materialRepository,
+          flashcardRepository: widget.flashcardRepository,
           questionRepository: widget.questionRepository,
           attemptRepository: widget.attemptRepository,
           diagramRepository: widget.diagramRepository,
+          challengeRepository: widget.challengeRepository,
+          documentRepository: widget.documentRepository,
+          materialProgressRepository: widget.materialProgressRepository,
         ),
       ),
     );
 
     if (mounted) {
       await _controller.load();
+    }
+  }
+
+  Future<void> _importDocument(BuildContext context) async {
+    final repository = widget.documentRepository;
+    if (repository == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Importação indisponível neste ambiente.'),
+        ),
+      );
+      return;
+    }
+    try {
+      final document = await const StudyDocumentImportService().pickAndImport(
+        repository,
+      );
+      if (document == null || !context.mounted) return;
+      {
+        final catalog = _materialRepository;
+        if (catalog is StudyMaterialCatalogRepository) catalog.invalidate();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Material “${document.title}” importado.')),
+        );
+        setState(() {});
+      }
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Não foi possível importar o material.')),
+      );
     }
   }
 
