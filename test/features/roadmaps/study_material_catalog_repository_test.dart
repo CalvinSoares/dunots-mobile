@@ -2,6 +2,8 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:dunots_mobile/core/models/flashcard.dart';
 import 'package:dunots_mobile/features/flashcards/data/flashcard_repository.dart';
+import 'package:dunots_mobile/features/diagrams/data/diagram_repository.dart';
+import 'package:dunots_mobile/features/diagrams/domain/study_diagram.dart';
 import 'package:dunots_mobile/features/questions/data/question_repository.dart';
 import 'package:dunots_mobile/features/questions/domain/question.dart';
 import 'package:dunots_mobile/features/roadmaps/data/study_material_catalog_repository.dart';
@@ -35,6 +37,16 @@ void main() {
           ),
         ],
       ),
+      diagramRepository: InMemoryDiagramRepository(
+        items: [
+          StudyDiagram(
+            id: 'diagram-1',
+            title: 'Topologia em estrela',
+            description: 'Concentrador central',
+            createdAt: DateTime(2026, 9, 30),
+          ),
+        ],
+      ),
     );
 
     final materials = await repository.getAll();
@@ -45,5 +57,12 @@ void main() {
     expect(question.type, StudyMaterialType.question);
     expect(question.title, 'Qual é a função do switch?');
     expect(question.subtitle, '#42 · Questão · Redes · Teste');
+
+    final diagram = materials.singleWhere(
+      (material) => material.id == 'diagram-1',
+    );
+    expect(diagram.type, StudyMaterialType.diagram);
+    expect(diagram.title, 'Topologia em estrela');
+    expect(diagram.subtitle, 'Fluxograma · Concentrador central');
   });
 }
