@@ -50,13 +50,22 @@ class SyncApplyResult {
   final int updated;
   final int deleted;
   final int keptLocal;
+  final String? backupId;
 
   const SyncApplyResult({
     required this.added,
     required this.updated,
     required this.deleted,
     required this.keptLocal,
+    this.backupId,
   });
+}
+
+class SyncBackup {
+  final String id;
+  final DateTime createdAt;
+
+  const SyncBackup({required this.id, required this.createdAt});
 }
 
 /// Persiste o contrato de sincronização e faz merge com o SQLite local.
@@ -72,6 +81,8 @@ class SyncDatabaseRepository {
   static const supportedCollections = <String>{
     SyncCollections.flashcards,
     SyncCollections.leetcodeProblems,
+    SyncCollections.challengeReviews,
+    SyncCollections.studyPhases,
     SyncCollections.diagrams,
     SyncCollections.quizExams,
     SyncCollections.quizQuestions,
@@ -120,6 +131,56 @@ class SyncDatabaseRepository {
       source: identity,
       collections: await _readCollections(),
     );
+  }
+
+  /// Guarda o estado completo antes de uma mesclagem destrutiva.
+  ///
+  /// O backup fica no SQLite para que uma falha ou conflito não elimine a
+  /// única cópia local antes da aplicação das escolhas do usuário.
+  Future<SyncBackup> createBackup() async {
+    final now = DateTime.now().toUtc();
+    final id = 'sync-backup-${now.microsecondsSinceEpoch}';
+    final payload = utf8.decode(await exportBytes());
+    await database.insert('sync_backups', {
+      'id': id,
+      'created_at': now.toIso8601String(),
+      'payload': payload,
+    });
+    await database.rawDelete(
+      'DELETE FROM sync_backups WHERE id NOT IN '
+      '(SELECT id FROM sync_backups ORDER BY created_at DESC LIMIT 5)',
+    );
+    return SyncBackup(id: id, createdAt: now);
+  }
+
+  Future<List<SyncBackup>> listBackups() async {
+    final rows = await database.query(
+      'sync_backups',
+      columns: ['id', 'created_at'],
+      orderBy: 'created_at DESC',
+    );
+    return rows
+        .map(
+          (row) => SyncBackup(
+            id: row['id']! as String,
+            createdAt: DateTime.parse(row['created_at']! as String),
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  Future<Uint8List> readBackup(String id) async {
+    final rows = await database.query(
+      'sync_backups',
+      columns: ['payload'],
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
+    if (rows.isEmpty) {
+      throw StateError('Backup de sincronização não encontrado.');
+    }
+    return Uint8List.fromList(utf8.encode(rows.single['payload']! as String));
   }
 
   Future<Uint8List> exportBytes() async {
@@ -230,6 +291,7 @@ class SyncDatabaseRepository {
     var updated = 0;
     var deleted = 0;
     var keptLocal = 0;
+    final backup = await createBackup();
 
     await database.transaction((transaction) async {
       for (final collection in SyncCollections.all) {
@@ -291,6 +353,7 @@ class SyncDatabaseRepository {
       updated: updated,
       deleted: deleted,
       keptLocal: keptLocal,
+      backupId: backup.id,
     );
   }
 
@@ -304,6 +367,12 @@ class SyncDatabaseRepository {
     collections[SyncCollections.leetcodeProblems] = (await database.query(
       'challenges',
     )).map(_challengeRecord).toList(growable: false);
+    collections[SyncCollections.challengeReviews] = (await database.query(
+      'challenge_reviews',
+    )).map(_challengeReviewRecord).toList(growable: false);
+    collections[SyncCollections.studyPhases] = (await database.query(
+      'study_phases',
+    )).map(_studyPhaseRecord).toList(growable: false);
     collections[SyncCollections.diagrams] = (await database.query('diagrams'))
         .map(_diagramRecord)
         .toList(growable: false);
@@ -335,6 +404,14 @@ class SyncDatabaseRepository {
     final createdAt = _string(row['created_at']);
     return SyncRecord({
       'id': _string(row['id']),
+      // Nomes canônicos do modelo desktop. Os aliases abaixo mantêm leitura
+      // compatível com pacotes mobile produzidos antes da v24.
+      'question': _string(row['front']),
+      'answer': _string(row['back']),
+      'codeSnippet': _string(row['code']),
+      'language': _string(row['language']),
+      if (row['quiz_question_id'] != null)
+        'quizQuestionId': row['quiz_question_id'],
       'front': _string(row['front']),
       'back': _string(row['back']),
       'code': _string(row['code']),
@@ -342,6 +419,9 @@ class SyncDatabaseRepository {
       'linkedMaterialIds': _decodeList(row['linked_material_ids']),
       'diagramIds': _decodeList(row['diagram_ids']),
       'createdAt': createdAt,
+      'nextReviewAt': _string(row['due_at']),
+      'lastReviewAt': _optionalString(row['last_reviewed_at']),
+      // Aliases legados para que pacotes mobile antigos continuem legíveis.
       'dueAt': _string(row['due_at']),
       'lastReviewedAt': _optionalString(row['last_reviewed_at']),
       'reviewCount': row['review_count'] ?? 0,
@@ -353,6 +433,19 @@ class SyncDatabaseRepository {
           _optionalString(row['updated_at']) ??
           _optionalString(row['last_reviewed_at']) ??
           createdAt,
+    });
+  }
+
+  SyncRecord _studyPhaseRecord(Map<String, Object?> row) {
+    return SyncRecord({
+      'id': _string(row['id']),
+      'title': _string(row['title']),
+      if (row['description'] != null) 'description': row['description'],
+      'flashcardIds': _decodeList(row['flashcard_ids']),
+      'problemIds': _decodeList(row['problem_ids']),
+      'sortOrder': row['sort_order'] ?? 0,
+      'createdAt': _string(row['created_at']),
+      'updatedAt': _string(row['updated_at']),
     });
   }
 
@@ -374,6 +467,7 @@ class SyncDatabaseRepository {
       'solution': _string(row['solution']),
       'notes': _string(row['notes']),
       'solvedAt': _optionalString(row['solved_at']),
+      'nextReviewAt': _optionalString(row['due_at']),
       'dueAt': _optionalString(row['due_at']),
       'interval': row['interval'] ?? 0,
       'easeFactor': row['ease_factor'] ?? 2.5,
@@ -395,6 +489,21 @@ class SyncDatabaseRepository {
       'problemIds': _decodeList(row['problem_ids']),
       'createdAt': _string(row['created_at']),
       'updatedAt': _string(row['updated_at']),
+    });
+  }
+
+  SyncRecord _challengeReviewRecord(Map<String, Object?> row) {
+    final reviewedAt = _string(row['reviewed_at']);
+    return SyncRecord({
+      'id': _string(row['id']),
+      'challengeId': _string(row['challenge_id']),
+      'rating': _string(row['rating']),
+      'reviewedAt': reviewedAt,
+      'previousInterval': row['previous_interval'] ?? 0,
+      'nextInterval': row['next_interval'] ?? 0,
+      'dueAt': _string(row['due_at']),
+      'createdAt': reviewedAt,
+      'updatedAt': reviewedAt,
     });
   }
 
@@ -523,20 +632,35 @@ class SyncDatabaseRepository {
       case SyncCollections.flashcards:
         await executor.insert('flashcards', {
           'id': record.id,
-          'front': _string(values['front']),
-          'back': _string(values['back']),
-          'code': _string(values['code']),
+          'front': _string(values['question'] ?? values['front']),
+          'back': _string(values['answer'] ?? values['back']),
+          'code': _string(values['codeSnippet'] ?? values['code']),
+          'language': _string(values['language']),
+          'quiz_question_id': values['quizQuestionId'],
           'tags': jsonEncode(_list(values['tags'])),
           'linked_material_ids': jsonEncode(_list(values['linkedMaterialIds'])),
           'diagram_ids': jsonEncode(_list(values['diagramIds'])),
           'created_at': _string(values['createdAt']),
-          'due_at': _string(values['dueAt']),
-          'last_reviewed_at': values['lastReviewedAt'],
+          'due_at': _string(values['nextReviewAt'] ?? values['dueAt']),
+          'last_reviewed_at':
+              values['lastReviewAt'] ?? values['lastReviewedAt'],
           'review_count': values['reviewCount'] ?? 0,
           'last_rating': values['lastRating'],
           'interval': values['interval'] ?? 0,
           'ease_factor': values['easeFactor'] ?? 2.5,
           'repetitions': values['repetitions'] ?? 0,
+          'updated_at': _string(values['updatedAt']),
+        }, conflictAlgorithm: ConflictAlgorithm.replace);
+        return;
+      case SyncCollections.studyPhases:
+        await executor.insert('study_phases', {
+          'id': record.id,
+          'title': _string(values['title']),
+          'description': values['description'],
+          'flashcard_ids': jsonEncode(_list(values['flashcardIds'])),
+          'problem_ids': jsonEncode(_list(values['problemIds'])),
+          'sort_order': values['sortOrder'] ?? 0,
+          'created_at': _string(values['createdAt']),
           'updated_at': _string(values['updatedAt']),
         }, conflictAlgorithm: ConflictAlgorithm.replace);
         return;
@@ -558,12 +682,23 @@ class SyncDatabaseRepository {
           'solution': _string(values['solution']),
           'notes': _string(values['notes']),
           'solved_at': values['solvedAt'],
-          'due_at': values['dueAt'],
+          'due_at': values['nextReviewAt'] ?? values['dueAt'],
           'interval': values['interval'] ?? 0,
           'ease_factor': values['easeFactor'] ?? 2.5,
           'repetitions': values['repetitions'] ?? 0,
           'created_at': _string(values['createdAt']),
           'updated_at': _string(values['updatedAt']),
+        }, conflictAlgorithm: ConflictAlgorithm.replace);
+        return;
+      case SyncCollections.challengeReviews:
+        await executor.insert('challenge_reviews', {
+          'id': record.id,
+          'challenge_id': _string(values['challengeId']),
+          'rating': _string(values['rating']),
+          'reviewed_at': _string(values['reviewedAt']),
+          'previous_interval': values['previousInterval'] ?? 0,
+          'next_interval': values['nextInterval'] ?? 0,
+          'due_at': _string(values['dueAt']),
         }, conflictAlgorithm: ConflictAlgorithm.replace);
         return;
       case SyncCollections.diagrams:
@@ -683,8 +818,18 @@ class SyncDatabaseRepository {
       case SyncCollections.flashcards:
         await executor.delete('flashcards', where: 'id = ?', whereArgs: [id]);
         break;
+      case SyncCollections.studyPhases:
+        await executor.delete('study_phases', where: 'id = ?', whereArgs: [id]);
+        break;
       case SyncCollections.leetcodeProblems:
         await executor.delete('challenges', where: 'id = ?', whereArgs: [id]);
+        break;
+      case SyncCollections.challengeReviews:
+        await executor.delete(
+          'challenge_reviews',
+          where: 'id = ?',
+          whereArgs: [id],
+        );
         break;
       case SyncCollections.diagrams:
         await executor.delete('diagrams', where: 'id = ?', whereArgs: [id]);

@@ -12,7 +12,7 @@ class AppDatabase {
         path.join(await getDatabasesPath(), 'dunots.db');
     final database = await openDatabase(
       databasePath,
-      version: 22,
+      version: 25,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
       },
@@ -55,8 +55,13 @@ class AppDatabase {
         await _createQuizExamsTable(database);
         await _createQuizAttemptsTable(database);
         await _createChallengeTable(database);
+        await _createChallengeReviewsTable(database);
+        await _createChallengeReviewsTombstoneTrigger(database);
         await _createDiagramTable(database);
+        await _createStudyPhasesTable(database);
+        await _createSyncBackupsTable(database);
         await _createSyncTables(database);
+        await _createStudyPhaseTombstoneTrigger(database);
       },
       onUpgrade: (database, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -225,6 +230,37 @@ class AppDatabase {
           await _createDiagramTable(database);
           await _createSyncTables(database);
         }
+        if (oldVersion < 23) {
+          await _createChallengeReviewsTable(database);
+          await _createChallengeReviewsTombstoneTrigger(database);
+        }
+        if (oldVersion < 24) {
+          await _addColumnIfMissing(
+            database,
+            'flashcards',
+            'language TEXT NOT NULL DEFAULT \'\'',
+          );
+          await _addColumnIfMissing(
+            database,
+            'flashcards',
+            'quiz_question_id TEXT',
+          );
+          await _createStudyPhasesTable(database);
+          await _createSyncBackupsTable(database);
+          await _createSyncTables(database);
+          await _createStudyPhaseTombstoneTrigger(database);
+        }
+        if (oldVersion < 25) {
+          await _addColumnIfMissing(
+            database,
+            'study_phases',
+            'sort_order INTEGER NOT NULL DEFAULT 0',
+          );
+          await database.execute(
+            'CREATE INDEX IF NOT EXISTS study_phases_order_index '
+            'ON study_phases(sort_order ASC, updated_at DESC)',
+          );
+        }
       },
     );
 
@@ -232,6 +268,17 @@ class AppDatabase {
   }
 
   Future<void> close() => database.close();
+
+  static Future<void> _addColumnIfMissing(
+    Database database,
+    String table,
+    String definition,
+  ) async {
+    final column = definition.split(' ').first;
+    final columns = await database.rawQuery('PRAGMA table_info($table)');
+    if (columns.any((row) => row['name'] == column)) return;
+    await database.execute('ALTER TABLE $table ADD COLUMN $definition');
+  }
 
   static Future<void> _createMaterialLinksTable(Database database) async {
     await database.execute('''
@@ -252,6 +299,8 @@ class AppDatabase {
         front TEXT NOT NULL,
         back TEXT NOT NULL,
         code TEXT NOT NULL DEFAULT '',
+        language TEXT NOT NULL DEFAULT '',
+        quiz_question_id TEXT,
         tags TEXT NOT NULL DEFAULT '[]',
         linked_material_ids TEXT NOT NULL DEFAULT '[]',
         diagram_ids TEXT NOT NULL DEFAULT '[]',
@@ -466,6 +515,55 @@ class AppDatabase {
     );
   }
 
+  static Future<void> _createStudyPhaseTombstoneTrigger(
+    Database database,
+  ) async {
+    await _createSyncTombstoneTrigger(
+      database,
+      name: 'sync_study_phases_delete',
+      table: 'study_phases',
+      collection: 'study_phases',
+      idExpression: 'OLD.id',
+    );
+  }
+
+  static Future<void> _createStudyPhasesTable(Database database) async {
+    await database.execute('''
+      CREATE TABLE IF NOT EXISTS study_phases (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        description TEXT,
+        flashcard_ids TEXT NOT NULL DEFAULT '[]',
+        problem_ids TEXT NOT NULL DEFAULT '[]',
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
+    await database.execute(
+      'CREATE INDEX IF NOT EXISTS study_phases_updated_index '
+      'ON study_phases(updated_at DESC)',
+    );
+    await database.execute(
+      'CREATE INDEX IF NOT EXISTS study_phases_order_index '
+      'ON study_phases(sort_order ASC, updated_at DESC)',
+    );
+  }
+
+  static Future<void> _createSyncBackupsTable(Database database) async {
+    await database.execute('''
+      CREATE TABLE IF NOT EXISTS sync_backups (
+        id TEXT PRIMARY KEY,
+        created_at TEXT NOT NULL,
+        payload TEXT NOT NULL
+      )
+    ''');
+    await database.execute(
+      'CREATE INDEX IF NOT EXISTS sync_backups_created_index '
+      'ON sync_backups(created_at DESC)',
+    );
+  }
+
   static Future<void> _createChallengeTable(Database database) async {
     await database.execute('''
       CREATE TABLE IF NOT EXISTS challenges (
@@ -513,6 +611,37 @@ class AppDatabase {
         updated_at TEXT NOT NULL
       )
     ''');
+  }
+
+  static Future<void> _createChallengeReviewsTable(Database database) async {
+    await database.execute('''
+      CREATE TABLE IF NOT EXISTS challenge_reviews (
+        id TEXT PRIMARY KEY,
+        challenge_id TEXT NOT NULL,
+        rating TEXT NOT NULL,
+        reviewed_at TEXT NOT NULL,
+        previous_interval INTEGER NOT NULL DEFAULT 0,
+        next_interval INTEGER NOT NULL DEFAULT 0,
+        due_at TEXT NOT NULL,
+        FOREIGN KEY (challenge_id) REFERENCES challenges(id) ON DELETE CASCADE
+      )
+    ''');
+    await database.execute(
+      'CREATE INDEX IF NOT EXISTS challenge_reviews_challenge_index '
+      'ON challenge_reviews(challenge_id, reviewed_at DESC)',
+    );
+  }
+
+  static Future<void> _createChallengeReviewsTombstoneTrigger(
+    Database database,
+  ) async {
+    await _createSyncTombstoneTrigger(
+      database,
+      name: 'sync_challenge_reviews_delete',
+      table: 'challenge_reviews',
+      collection: 'challenge_reviews',
+      idExpression: 'OLD.id',
+    );
   }
 
   static Future<void> _createSyncTombstoneTrigger(
