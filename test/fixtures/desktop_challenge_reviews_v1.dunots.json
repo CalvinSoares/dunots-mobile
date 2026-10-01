@@ -1,0 +1,66 @@
+{
+  "format": "dunots-sync",
+  "version": 1,
+  "exportedAt": "2026-10-01T12:00:00.000Z",
+  "source": {
+    "deviceId": "desktop-realistic-1",
+    "deviceName": "Dunots Desktop"
+  },
+  "collections": {
+    "leetcode_problems": [
+      {
+        "id": "desktop-review-challenge",
+        "problemId": "two-sum",
+        "title": "Two Sum",
+        "variantName": "Hash Map",
+        "strategy": "Mapa de complementos.",
+        "url": "https://leetcode.com/problems/two-sum/",
+        "difficulty": "easy",
+        "tags": ["array", "hash-table"],
+        "complexity": "O(n)",
+        "timeComplexity": "O(n)",
+        "spaceComplexity": "O(n)",
+        "tradeoffs": "Usa memória extra.",
+        "diagramIds": [],
+        "solution": "function twoSum() {}",
+        "notes": "Fixture de histórico.",
+        "solvedAt": "2026-09-30T10:00:00.000Z",
+        "nextReviewAt": "2026-10-04T10:00:00.000Z",
+        "interval": 4,
+        "easeFactor": 2.65,
+        "repetitions": 1,
+        "createdAt": "2026-09-20T10:00:00.000Z",
+        "updatedAt": "2026-09-30T10:00:00.000Z"
+      }
+    ],
+    "challenge_reviews": [
+      {
+        "id": "desktop-review-1",
+        "challengeId": "desktop-review-challenge",
+        "rating": "medium",
+        "reviewedAt": "2026-09-25T10:00:00.000Z",
+        "previousInterval": 0,
+        "nextInterval": 1,
+        "dueAt": "2026-09-26T10:00:00.000Z"
+      },
+      {
+        "id": "desktop-review-2",
+        "challengeId": "desktop-review-challenge",
+        "rating": "easy",
+        "reviewedAt": "2026-09-26T10:00:00.000Z",
+        "previousInterval": 1,
+        "nextInterval": 4,
+        "dueAt": "2026-09-30T10:00:00.000Z"
+      },
+      {
+        "id": "desktop-review-3",
+        "challengeId": "desktop-review-challenge",
+        "rating": "again",
+        "reviewedAt": "2026-09-30T10:00:00.000Z",
+        "previousInterval": 4,
+        "nextInterval": 0,
+        "dueAt": "2026-09-30T10:10:00.000Z"
+      }
+    ]
+  }
+}
