@@ -4,10 +4,14 @@ import 'package:dunots_mobile/core/models/flashcard.dart';
 import 'package:dunots_mobile/features/flashcards/data/flashcard_repository.dart';
 import 'package:dunots_mobile/features/diagrams/data/diagram_repository.dart';
 import 'package:dunots_mobile/features/diagrams/domain/study_diagram.dart';
+import 'package:dunots_mobile/features/challenges/data/challenge_repository.dart';
+import 'package:dunots_mobile/features/challenges/domain/challenge.dart';
 import 'package:dunots_mobile/features/questions/data/question_repository.dart';
 import 'package:dunots_mobile/features/questions/domain/question.dart';
 import 'package:dunots_mobile/features/roadmaps/data/study_material_catalog_repository.dart';
 import 'package:dunots_mobile/features/roadmaps/domain/study_material.dart';
+import 'package:dunots_mobile/features/roadmaps/data/study_document_repository.dart';
+import 'package:dunots_mobile/features/roadmaps/domain/study_document.dart';
 
 void main() {
   test('o catálogo expõe questões reais como materiais vinculáveis', () async {
@@ -47,6 +51,28 @@ void main() {
           ),
         ],
       ),
+      challengeRepository: InMemoryChallengeRepository(
+        items: [
+          Challenge(
+            id: 'challenge-1',
+            title: 'Resolver colisões',
+            createdAt: DateTime(2026, 9, 30),
+          ),
+        ],
+      ),
+      documentRepository: InMemoryStudyDocumentRepository(
+        items: [
+          StudyDocument(
+            id: 'document-1',
+            title: 'Resumo de redes',
+            fileName: 'redes.pdf',
+            filePath: '/dados/redes.pdf',
+            mimeType: 'application/pdf',
+            byteSize: 2048,
+            importedAt: DateTime(2026, 9, 30),
+          ),
+        ],
+      ),
     );
 
     final materials = await repository.getAll();
@@ -64,5 +90,21 @@ void main() {
     expect(diagram.type, StudyMaterialType.diagram);
     expect(diagram.title, 'Topologia em estrela');
     expect(diagram.subtitle, 'Fluxograma · Concentrador central');
+
+    final challenge = materials.singleWhere(
+      (material) => material.id == 'challenge-1',
+    );
+    expect(challenge.type, StudyMaterialType.challenge);
+    expect(challenge.subtitle, 'Desafio · medium');
+
+    final document = materials.singleWhere(
+      (material) => material.id == 'document-1',
+    );
+    expect(document.type, StudyMaterialType.document);
+    expect(document.title, 'Resumo de redes');
+    expect(
+      materials.where((material) => material.id == 'document-001'),
+      isEmpty,
+    );
   });
 }

@@ -7,6 +7,11 @@ import 'package:dunots_mobile/features/roadmaps/data/study_track_repository.dart
 import 'package:dunots_mobile/features/roadmaps/domain/study_material.dart';
 import 'package:dunots_mobile/features/roadmaps/domain/study_node.dart';
 import 'package:dunots_mobile/features/roadmaps/domain/study_track.dart';
+import 'package:dunots_mobile/features/roadmaps/data/study_material_progress_repository.dart';
+import 'package:dunots_mobile/core/models/flashcard.dart';
+import 'package:dunots_mobile/features/flashcards/data/flashcard_repository.dart';
+import 'package:dunots_mobile/features/challenges/data/challenge_repository.dart';
+import 'package:dunots_mobile/features/challenges/domain/challenge.dart';
 import 'package:dunots_mobile/features/roadmaps/roadmaps_preview_page.dart';
 import 'package:dunots_mobile/features/questions/data/question_repository.dart';
 import 'package:dunots_mobile/features/quizzes/data/quiz_attempt_repository.dart';
@@ -68,10 +73,15 @@ void main() {
     await tester.tap(find.text('Criar'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Topologia em estrela'), findsOneWidget);
     final nodes = await nodeRepository.getForTrack('track-001');
     expect(nodes, hasLength(2));
     expect(nodes.last.parentId, nodes.first.id);
+    await tester.scrollUntilVisible(
+      find.text('Topologia em estrela'),
+      240,
+      scrollable: find.byType(Scrollable).last,
+    );
+    expect(find.text('Topologia em estrela'), findsOneWidget);
     expect(find.text('0/2 itens concluídos'), findsOneWidget);
 
     await tester.ensureVisible(find.byType(Checkbox).first);
@@ -97,7 +107,9 @@ void main() {
     await tester.tap(find.text('Salvar vínculos'));
     await tester.pumpAndSettle();
 
-    final linkedMaterials = await linkRepository.getForNode(nodes.first.id);
+    final linkedMaterials = [
+      for (final node in nodes) ...await linkRepository.getForNode(node.id),
+    ];
     expect(linkedMaterials, hasLength(1));
     expect(linkedMaterials.single.materialType, StudyMaterialType.flashcard);
 
@@ -191,6 +203,89 @@ void main() {
     expect((await attemptRepository.getAll()).single.questionIds, [
       'question-001',
     ]);
+  });
+
+  testWidgets('vincula e inicia desafios diretamente pelo tópico', (
+    tester,
+  ) async {
+    final now = DateTime(2026, 10, 1);
+    final trackRepository = InMemoryStudyTrackRepository(
+      tracks: const [
+        StudyTrack(
+          id: 'track-challenge',
+          title: 'Algoritmos',
+          description: '',
+          completedItems: 0,
+          totalItems: 1,
+        ),
+      ],
+    );
+    final nodeRepository = InMemoryStudyNodeRepository(
+      nodes: const [
+        StudyNode(
+          id: 'node-challenge',
+          trackId: 'track-challenge',
+          parentId: null,
+          title: 'Two Sum',
+          description: '',
+          sortOrder: 0,
+        ),
+      ],
+    );
+    final linkRepository = InMemoryStudyNodeMaterialRepository();
+    final challengeRepository = InMemoryChallengeRepository(
+      items: [
+        Challenge(
+          id: 'challenge-linked',
+          title: 'Two Sum · Hash Map',
+          solution: 'Use um mapa de complementos.',
+          createdAt: now,
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RoadmapsPreviewPage(
+          repository: trackRepository,
+          nodeRepository: nodeRepository,
+          materialLinkRepository: linkRepository,
+          challengeRepository: challengeRepository,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Abrir trilha'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Vincular material'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.byType(TextField),
+      ),
+      'Hash Map',
+    );
+    await tester.pump();
+    expect(find.text('Two Sum · Hash Map'), findsOneWidget);
+    await tester.tap(find.text('Two Sum · Hash Map'));
+    await tester.tap(find.text('Salvar vínculos'));
+    await tester.pumpAndSettle();
+
+    expect(
+      (await linkRepository.getForNode('node-challenge')).single.materialType,
+      StudyMaterialType.challenge,
+    );
+    expect(find.byTooltip('Estudar desafios vinculados'), findsOneWidget);
+    await tester.tap(find.byTooltip('Estudar desafios vinculados'));
+    await tester.pumpAndSettle();
+    expect(find.text('Two Sum · Hash Map'), findsOneWidget);
+    await tester.tap(find.text('Mostrar solução'));
+    await tester.pump();
+    await tester.tap(find.text('fácil'));
+    await tester.pumpAndSettle();
+    expect(find.text('Sessão concluída'), findsNWidgets(2));
   });
 
   testWidgets('seleciona questões manualmente em vários tópicos', (
@@ -374,4 +469,87 @@ void main() {
       'question-001',
     ]);
   });
+
+  testWidgets(
+    'abre um flashcard vinculado e atualiza o progresso ao confirmar',
+    (tester) async {
+      final trackRepository = InMemoryStudyTrackRepository(
+        tracks: const [
+          StudyTrack(
+            id: 'track-material-progress',
+            title: 'Trilha de redes',
+            description: '',
+            completedItems: 0,
+            totalItems: 1,
+          ),
+        ],
+      );
+      final nodeRepository = InMemoryStudyNodeRepository(
+        nodes: const [
+          StudyNode(
+            id: 'node-material-progress',
+            trackId: 'track-material-progress',
+            parentId: null,
+            title: 'TCP',
+            description: '',
+            sortOrder: 0,
+          ),
+        ],
+      );
+      final linkRepository = InMemoryStudyNodeMaterialRepository(
+        links: const [
+          StudyMaterialLink(
+            nodeId: 'node-material-progress',
+            materialId: 'card-material-progress',
+            materialType: StudyMaterialType.flashcard,
+          ),
+        ],
+      );
+      final progressRepository = InMemoryStudyMaterialProgressRepository();
+      final flashcardRepository = InMemoryFlashcardRepository(
+        cards: [
+          Flashcard(
+            id: 'card-material-progress',
+            front: 'O que é TCP?',
+            back: 'Protocolo orientado a conexão.',
+            createdAt: DateTime(2026, 10, 1),
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: RoadmapsPreviewPage(
+            repository: trackRepository,
+            nodeRepository: nodeRepository,
+            materialLinkRepository: linkRepository,
+            flashcardRepository: flashcardRepository,
+            materialProgressRepository: progressRepository,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Abrir trilha'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Abrir material vinculado'));
+      await tester.pumpAndSettle();
+      expect(find.text('Detalhes do flashcard'), findsOneWidget);
+      await tester.tap(find.text('Marcar como estudado'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('1/1 materiais estudados'), findsOneWidget);
+      expect(find.text('1/1 itens concluídos'), findsOneWidget);
+      expect(
+        await progressRepository.isCompleted(
+          const StudyMaterialLink(
+            nodeId: 'node-material-progress',
+            materialId: 'card-material-progress',
+            materialType: StudyMaterialType.flashcard,
+          ),
+        ),
+        isTrue,
+      );
+    },
+  );
 }
