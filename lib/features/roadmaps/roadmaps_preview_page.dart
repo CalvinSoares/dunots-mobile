@@ -12,6 +12,7 @@ import 'domain/study_track.dart';
 import 'presentation/study_tracks_controller.dart';
 import 'presentation/study_track_list_item.dart';
 import 'presentation/study_track_details_page.dart';
+import '../diagrams/data/diagram_repository.dart';
 
 class RoadmapsPreviewPage extends StatefulWidget {
   final StudyTrackRepository? repository;
@@ -20,6 +21,7 @@ class RoadmapsPreviewPage extends StatefulWidget {
   final FlashcardRepository? flashcardRepository;
   final QuestionRepository? questionRepository;
   final QuizAttemptRepository? attemptRepository;
+  final DiagramRepository? diagramRepository;
 
   const RoadmapsPreviewPage({
     super.key,
@@ -29,6 +31,7 @@ class RoadmapsPreviewPage extends StatefulWidget {
     this.flashcardRepository,
     this.questionRepository,
     this.attemptRepository,
+    this.diagramRepository,
   });
 
   @override
@@ -55,6 +58,7 @@ class _RoadmapsPreviewPageState extends State<RoadmapsPreviewPage> {
           widget.flashcardRepository ?? InMemoryFlashcardRepository(),
       questionRepository:
           widget.questionRepository ?? InMemoryQuestionRepository(),
+      diagramRepository: widget.diagramRepository,
     );
     _controller.load();
   }
@@ -132,6 +136,7 @@ class _RoadmapsPreviewPageState extends State<RoadmapsPreviewPage> {
           materialRepository: _materialRepository,
           questionRepository: widget.questionRepository,
           attemptRepository: widget.attemptRepository,
+          diagramRepository: widget.diagramRepository,
         ),
       ),
     );

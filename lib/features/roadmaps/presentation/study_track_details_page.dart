@@ -12,6 +12,9 @@ import '../data/study_track_repository.dart';
 import '../domain/study_node.dart';
 import '../domain/study_material.dart';
 import '../domain/study_track.dart';
+import '../../diagrams/data/diagram_repository.dart';
+import '../../diagrams/diagram_viewer_page.dart';
+import '../../diagrams/domain/study_diagram.dart';
 import 'study_node_filters.dart';
 import 'study_nodes_controller.dart';
 
@@ -23,6 +26,7 @@ class StudyTrackDetailsPage extends StatefulWidget {
   final StudyNodeMaterialRepository? materialLinkRepository;
   final QuestionRepository? questionRepository;
   final QuizAttemptRepository? attemptRepository;
+  final DiagramRepository? diagramRepository;
 
   const StudyTrackDetailsPage({
     super.key,
@@ -33,6 +37,7 @@ class StudyTrackDetailsPage extends StatefulWidget {
     this.materialLinkRepository,
     this.questionRepository,
     this.attemptRepository,
+    this.diagramRepository,
   });
 
   @override
@@ -45,6 +50,7 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
   late final StudyNodeMaterialRepository _materialLinkRepository;
   late final QuestionRepository _questionRepository;
   late final QuizAttemptRepository _attemptRepository;
+  late final DiagramRepository _diagramRepository;
   final Map<String, List<StudyMaterialLink>> _linksByNode = {};
   String _searchQuery = '';
   StudyPriority? _priorityFilter;
@@ -65,6 +71,8 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
         widget.questionRepository ?? InMemoryQuestionRepository();
     _attemptRepository =
         widget.attemptRepository ?? InMemoryQuizAttemptRepository();
+    _diagramRepository =
+        widget.diagramRepository ?? InMemoryDiagramRepository();
     _loadNodes();
   }
 
@@ -360,6 +368,15 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
                           .length ??
                       0,
                   onLinkMaterial: () => _showMaterialDialog(context, node),
+                  linkedDiagramCount:
+                      _linksByNode[node.id]
+                          ?.where(
+                            (link) =>
+                                link.materialType == StudyMaterialType.diagram,
+                          )
+                          .length ??
+                      0,
+                  onOpenDiagram: () => _openLinkedDiagrams(context, node),
                   onStartQuiz: () => _startQuizFromNode(node),
                   onMoveUp: () => _moveNode(node.id, direction: -1),
                   onMoveDown: () => _moveNode(node.id, direction: 1),
@@ -444,6 +461,53 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
 
     await _materialLinkRepository.replaceForNode(node.id, links);
     await _loadLinks();
+  }
+
+  Future<void> _openLinkedDiagrams(BuildContext context, StudyNode node) async {
+    final links = (_linksByNode[node.id] ?? const [])
+        .where((link) => link.materialType == StudyMaterialType.diagram)
+        .toList(growable: false);
+    final diagrams = await _diagramRepository.getAll();
+    final linked = diagrams
+        .where((diagram) => links.any((link) => link.materialId == diagram.id))
+        .toList(growable: false);
+    if (!context.mounted) return;
+    if (linked.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Nenhum fluxograma vinculado encontrado.'),
+        ),
+      );
+      return;
+    }
+    final selected = linked.length == 1
+        ? linked.first
+        : await showDialog<StudyDiagram>(
+            context: context,
+            builder: (_) => AlertDialog(
+              title: const Text('Abrir fluxograma'),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: linked.length,
+                  itemBuilder: (context, index) {
+                    final diagram = linked[index];
+                    return ListTile(
+                      leading: const Icon(Icons.account_tree_outlined),
+                      title: Text(diagram.title),
+                      subtitle: Text('${diagram.nodes.length} blocos'),
+                      onTap: () => Navigator.of(context).pop(diagram),
+                    );
+                  },
+                ),
+              ),
+            ),
+          );
+    if (selected == null || !context.mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => DiagramViewerPage(diagram: selected)),
+    );
   }
 
   Future<void> _startQuizFromNode(StudyNode node) async {
@@ -773,7 +837,9 @@ class _NodeActions extends StatelessWidget {
   final VoidCallback onMoveDown;
   final int linkedMaterialsCount;
   final int linkedQuestionCount;
+  final int linkedDiagramCount;
   final VoidCallback onLinkMaterial;
+  final VoidCallback onOpenDiagram;
   final VoidCallback onStartQuiz;
 
   const _NodeActions({
@@ -786,7 +852,9 @@ class _NodeActions extends StatelessWidget {
     required this.onMoveDown,
     required this.linkedMaterialsCount,
     required this.linkedQuestionCount,
+    required this.linkedDiagramCount,
     required this.onLinkMaterial,
+    required this.onOpenDiagram,
     required this.onStartQuiz,
   });
 
@@ -820,6 +888,15 @@ class _NodeActions extends StatelessWidget {
                 isLabelVisible: linkedMaterialsCount > 0,
                 label: Text('$linkedMaterialsCount'),
                 child: const Icon(Icons.link),
+              ),
+            ),
+            IconButton(
+              tooltip: 'Abrir fluxograma vinculado',
+              onPressed: linkedDiagramCount == 0 ? null : onOpenDiagram,
+              icon: Badge(
+                isLabelVisible: linkedDiagramCount > 0,
+                label: Text('$linkedDiagramCount'),
+                child: const Icon(Icons.account_tree_outlined),
               ),
             ),
             IconButton(
@@ -1339,6 +1416,8 @@ String _materialTypeLabel(StudyMaterialType type) {
       return 'Questão';
     case StudyMaterialType.document:
       return 'Material';
+    case StudyMaterialType.diagram:
+      return 'Fluxograma';
   }
 }
 
@@ -1350,6 +1429,8 @@ IconData _materialTypeIcon(StudyMaterialType type) {
       return Icons.quiz_outlined;
     case StudyMaterialType.document:
       return Icons.description_outlined;
+    case StudyMaterialType.diagram:
+      return Icons.account_tree_outlined;
   }
 }
 
