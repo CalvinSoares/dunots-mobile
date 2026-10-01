@@ -41,6 +41,11 @@ void main() {
 
     await tester.tap(find.text('Selecionar'));
     await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byType(Checkbox),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.tap(find.byType(Checkbox));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Montar simulado (1)'));

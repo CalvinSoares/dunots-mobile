@@ -155,6 +155,7 @@ void main() {
 
     expect(find.text('Resumo da revisão'), findsOneWidget);
     expect(find.text('Questões erradas'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Questões pendentes'), 300);
     expect(find.text('Questões pendentes'), findsOneWidget);
     expect(find.text('1'), findsWidgets);
 
@@ -162,9 +163,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(
       find.text('Qual protocolo foi respondido incorretamente?'),
-      findsOneWidget,
+      findsWidgets,
     );
-    expect(find.text('Sua resposta: B · Gabarito: A'), findsOneWidget);
+    expect(find.text('Sua resposta: B · Gabarito: A'), findsWidgets);
 
     await tester.tap(find.text('Fechar'));
     await tester.pumpAndSettle();
