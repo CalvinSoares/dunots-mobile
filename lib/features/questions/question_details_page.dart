@@ -64,6 +64,12 @@ class QuestionDetailsPage extends StatelessWidget {
               fontWeight: FontWeight.w800,
             ),
           ),
+          const SizedBox(height: 18),
+          FilledButton.icon(
+            onPressed: () => Navigator.of(context).pop(true),
+            icon: const Icon(Icons.check_circle_outline),
+            label: const Text('Marcar como estudada'),
+          ),
           if (question.visualImages.isNotEmpty) ...[
             const SizedBox(height: 16),
             Text(

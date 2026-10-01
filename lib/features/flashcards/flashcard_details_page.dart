@@ -62,6 +62,15 @@ class FlashcardDetailsPage extends StatelessWidget {
                 ),
               ),
             ),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: () => Navigator.of(context).pop(true),
+                icon: const Icon(Icons.check_circle_outline),
+                label: const Text('Marcar como estudado'),
+              ),
+            ),
             if (card.tags.isNotEmpty) ...[
               const SizedBox(height: 24),
               Text(
@@ -173,6 +182,21 @@ class FlashcardDetailsPage extends StatelessWidget {
             ),
           );
         }
+      case StudyMaterialType.challenge:
+        if (!context.mounted) return;
+        await showDialog<void>(
+          context: context,
+          builder: (_) => AlertDialog(
+            title: Text(material.title),
+            content: Text(material.subtitle),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Fechar'),
+              ),
+            ],
+          ),
+        );
       case StudyMaterialType.flashcard:
         final repository = flashcardRepository;
         if (repository == null) return;
@@ -228,6 +252,7 @@ class FlashcardDetailsPage extends StatelessWidget {
     return switch (type) {
       StudyMaterialType.flashcard => Icons.style_outlined,
       StudyMaterialType.question => Icons.quiz_outlined,
+      StudyMaterialType.challenge => Icons.code_outlined,
       StudyMaterialType.document => Icons.description_outlined,
       StudyMaterialType.diagram => Icons.account_tree_outlined,
     };

@@ -119,6 +119,7 @@ class _FlashcardMaterialLinkDialogState
     return switch (type) {
       StudyMaterialType.flashcard => Icons.style_outlined,
       StudyMaterialType.question => Icons.quiz_outlined,
+      StudyMaterialType.challenge => Icons.code_outlined,
       StudyMaterialType.document => Icons.description_outlined,
       StudyMaterialType.diagram => Icons.account_tree_outlined,
     };

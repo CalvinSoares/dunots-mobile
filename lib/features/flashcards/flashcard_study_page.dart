@@ -380,6 +380,21 @@ class _FlashcardStudyPageState extends State<FlashcardStudyPage> {
             ),
           );
         }
+      case StudyMaterialType.challenge:
+        if (!mounted) return;
+        await showDialog<void>(
+          context: context,
+          builder: (_) => AlertDialog(
+            title: Text(material.title),
+            content: Text(material.subtitle),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Fechar'),
+              ),
+            ],
+          ),
+        );
       case StudyMaterialType.flashcard:
         final repository = widget.repository;
         if (repository == null) return;
@@ -437,6 +452,7 @@ class _FlashcardStudyPageState extends State<FlashcardStudyPage> {
     return switch (type) {
       StudyMaterialType.flashcard => Icons.style_outlined,
       StudyMaterialType.question => Icons.quiz_outlined,
+      StudyMaterialType.challenge => Icons.code_outlined,
       StudyMaterialType.document => Icons.description_outlined,
       StudyMaterialType.diagram => Icons.account_tree_outlined,
     };
