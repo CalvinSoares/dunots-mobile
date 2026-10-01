@@ -1,0 +1,149 @@
+{
+  "format": "dunots-sync",
+  "version": 1,
+  "exportedAt": "2026-09-30T12:00:00.000Z",
+  "source": {
+    "deviceId": "desktop-fixture-1",
+    "deviceName": "Dunots Desktop"
+  },
+  "collections": {
+    "flashcards": [
+      {
+        "id": "desktop-card-1",
+        "question": "O que é uma VLAN?",
+        "answer": "Uma rede lógica segmentada.",
+        "codeSnippet": "interface vlan 10",
+        "language": "cisco",
+        "quizQuestionId": "question-1",
+        "tags": ["redes", "infraestrutura"],
+        "diagramIds": ["diagram-1"],
+        "interval": 4,
+        "easeFactor": 2.6,
+        "repetitions": 3,
+        "lastReviewAt": "2026-09-28T12:00:00.000Z",
+        "nextReviewAt": "2026-10-02T12:00:00.000Z",
+        "createdAt": "2026-09-20T12:00:00.000Z",
+        "updatedAt": "2026-09-28T12:00:00.000Z"
+      }
+    ],
+    "leetcode_problems": [
+      {
+        "id": "desktop-challenge-1",
+        "problemId": "two-sum",
+        "title": "Two Sum",
+        "variantName": "Hash Map",
+        "strategy": "Uma passagem usando mapa de frequências.",
+        "url": "https://leetcode.com/problems/two-sum/",
+        "difficulty": "easy",
+        "tags": ["array", "hash-table"],
+        "complexity": "O(n)",
+        "timeComplexity": "O(n)",
+        "spaceComplexity": "O(n)",
+        "tradeoffs": "Mais memória em troca de uma passagem.",
+        "diagramIds": ["diagram-1"],
+        "solution": "function twoSum(nums, target) {}",
+        "notes": "Revisar colisões.",
+        "solvedAt": "2026-09-29T12:00:00.000Z",
+        "interval": 2,
+        "easeFactor": 2.5,
+        "repetitions": 1,
+        "nextReviewAt": "2026-10-01T12:00:00.000Z",
+        "createdAt": "2026-09-20T12:00:00.000Z",
+        "updatedAt": "2026-09-29T12:00:00.000Z"
+      },
+      {
+        "id": "desktop-challenge-2",
+        "problemId": "two-sum",
+        "title": "Two Sum",
+        "variantName": "Ordenação",
+        "strategy": "Ordenar e usar dois ponteiros.",
+        "url": "https://leetcode.com/problems/two-sum/",
+        "difficulty": "easy",
+        "tags": ["array", "two-pointers"],
+        "complexity": "O(n log n)",
+        "timeComplexity": "O(n log n)",
+        "spaceComplexity": "O(1)",
+        "tradeoffs": "Economiza memória, mas altera a ordem.",
+        "diagramIds": [],
+        "solution": "function twoSumSorted(nums, target) {}",
+        "notes": "Preservar os índices originais.",
+        "interval": 0,
+        "easeFactor": 2.5,
+        "repetitions": 0,
+        "nextReviewAt": "2026-09-30T12:00:00.000Z",
+        "createdAt": "2026-09-30T12:00:00.000Z",
+        "updatedAt": "2026-09-30T12:00:00.000Z"
+      }
+    ],
+    "challenge_reviews": [],
+    "articles": [],
+    "snippets": [],
+    "study_phases": [
+      {
+        "id": "phase-1",
+        "title": "Redes fundamentais",
+        "description": "Revisar os fundamentos antes do simulado.",
+        "flashcardIds": ["desktop-card-1"],
+        "problemIds": ["desktop-challenge-1"],
+        "createdAt": "2026-09-20T12:00:00.000Z",
+        "updatedAt": "2026-09-29T12:00:00.000Z"
+      }
+    ],
+    "diagrams": [
+      {
+        "id": "diagram-1",
+        "title": "Segmentação de rede",
+        "description": "VLAN e roteamento inter-VLAN.",
+        "nodes": [
+          {"id": "node-a", "type": "default", "position": {"x": 10, "y": 20}, "data": {"label": "Switch"}}
+        ],
+        "edges": [],
+        "phaseIds": ["phase-1"],
+        "flashcardIds": ["desktop-card-1"],
+        "problemIds": ["desktop-challenge-1"],
+        "createdAt": "2026-09-20T12:00:00.000Z",
+        "updatedAt": "2026-09-29T12:00:00.000Z"
+      }
+    ],
+    "quiz_exams": [
+      {
+        "id": "exam-1",
+        "title": "Transpetro 2023",
+        "contestName": "Transpetro",
+        "vacancy": "Análise de Sistemas",
+        "proofVersion": "Prova 6",
+        "board": "Cesgranrio",
+        "year": 2023,
+        "sourceName": "prova.pdf",
+        "answerKeyName": "gabarito.pdf",
+        "createdAt": "2026-09-20T12:00:00.000Z",
+        "updatedAt": "2026-09-29T12:00:00.000Z"
+      }
+    ],
+    "quiz_questions": [
+      {
+        "id": "question-1",
+        "examId": "exam-1",
+        "order": 1,
+        "statement": "Qual alternativa está correta?",
+        "options": [{"id": "A", "text": "Primeira"}, {"id": "B", "text": "Segunda"}],
+        "correctOption": "B",
+        "explanation": "A segunda alternativa explica o conceito.",
+        "notes": "Revisar o capítulo 2.",
+        "examName": "Prova 6",
+        "subject": "Redes",
+        "topic": "VLAN",
+        "sourceName": "prova.pdf",
+        "sourcePage": 1,
+        "visualImages": ["diagram-question.png"],
+        "createdAt": "2026-09-20T12:00:00.000Z",
+        "updatedAt": "2026-09-29T12:00:00.000Z"
+      }
+    ],
+    "quiz_attempts": [],
+    "study_roadmaps": [],
+    "roadmap_nodes": [],
+    "roadmap_links": [],
+    "sync_tombstones": []
+  }
+}
