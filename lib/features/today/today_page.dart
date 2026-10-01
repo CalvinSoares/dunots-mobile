@@ -7,6 +7,7 @@ import '../flashcards/data/flashcard_review_preferences_repository.dart';
 import '../flashcards/data/flashcard_session_repository.dart';
 import '../challenges/data/challenge_repository.dart';
 import '../challenges/domain/challenge.dart';
+import '../challenges/domain/challenge_performance.dart';
 import '../study/mixed_study_session_page.dart';
 import '../study/data/study_phase_repository.dart';
 import '../study/domain/study_phase.dart';
@@ -75,9 +76,15 @@ class _TodayPageState extends State<TodayPage> {
         await (widget.flashcardRepository ?? InMemoryFlashcardRepository())
             .getAll();
     final now = DateTime.now();
-    final challenges =
-        await (widget.challengeRepository ?? InMemoryChallengeRepository())
-            .getAll();
+    final challengeRepository =
+        widget.challengeRepository ?? InMemoryChallengeRepository();
+    final challenges = await challengeRepository.getAll();
+    final reviewLists = await Future.wait(
+      challenges.map(
+        (challenge) => challengeRepository.getReviewHistory(challenge.id),
+      ),
+    );
+    final challengeReviews = reviewLists.expand((reviews) => reviews).toList();
     final dueChallenges = challenges
         .where((challenge) => challenge.isDueAt(now))
         .length;
@@ -118,6 +125,11 @@ class _TodayPageState extends State<TodayPage> {
       preferences: preferences,
       challenges: challenges,
       dueChallenges: dueChallenges,
+      challengePerformance: ChallengePerformance.from(
+        challenges: challenges,
+        reviews: challengeReviews,
+        now: now,
+      ),
       phases: phases,
     );
   }
@@ -306,6 +318,8 @@ class _TodayPageState extends State<TodayPage> {
                     onTap: widget.onOpenChallenges,
                   ),
                   const SizedBox(height: 10),
+                  _buildChallengePerformance(context, data),
+                  const SizedBox(height: 10),
                   QuickAction(
                     icon: Icons.assignment_outlined,
                     title: firstAttempt == null
@@ -377,6 +391,56 @@ class _TodayPageState extends State<TodayPage> {
           ),
         );
       },
+    );
+  }
+
+  Widget _buildChallengePerformance(BuildContext context, _TodayData data) {
+    final performance = data.challengePerformance;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.insights_outlined),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Desempenho dos desafios',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ),
+                Text(
+                  performance.totalReviews == 0
+                      ? 'sem histórico'
+                      : '${(performance.successRate * 100).round()}% aproveitamento',
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.primary,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                Chip(label: Text('${performance.totalReviews} revisões')),
+                Chip(label: Text('${performance.dueChallenges} pendentes')),
+                Chip(
+                  label: Text('novamente ${performance.ratingCount('again')}'),
+                ),
+                Chip(label: Text('difícil ${performance.ratingCount('hard')}')),
+                Chip(label: Text('bom ${performance.ratingCount('medium')}')),
+                Chip(label: Text('fácil ${performance.ratingCount('easy')}')),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -649,6 +713,7 @@ class _TodayData {
   final FlashcardReviewPreferences preferences;
   final List<Challenge> challenges;
   final int dueChallenges;
+  final ChallengePerformance challengePerformance;
   final List<StudyPhase> phases;
 
   const _TodayData({
@@ -660,6 +725,7 @@ class _TodayData {
     required this.preferences,
     required this.challenges,
     required this.dueChallenges,
+    required this.challengePerformance,
     required this.phases,
   });
 }
