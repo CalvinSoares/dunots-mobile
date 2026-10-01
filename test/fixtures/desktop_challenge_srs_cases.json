@@ -1,0 +1,98 @@
+[
+  {
+    "name": "novo novamente",
+    "rating": "again",
+    "interval": 0,
+    "easeFactor": 2.5,
+    "repetitions": 0,
+    "reviewedAt": "2026-09-30T10:00:00.000Z",
+    "nextInterval": 0,
+    "nextEaseFactor": 2.3,
+    "nextRepetitions": 0,
+    "dueAt": "2026-09-30T10:10:00.000Z"
+  },
+  {
+    "name": "novo difícil",
+    "rating": "hard",
+    "interval": 0,
+    "easeFactor": 2.5,
+    "repetitions": 0,
+    "reviewedAt": "2026-09-30T10:00:00.000Z",
+    "nextInterval": 1,
+    "nextEaseFactor": 2.35,
+    "nextRepetitions": 1,
+    "dueAt": "2026-10-01T10:00:00.000Z"
+  },
+  {
+    "name": "novo médio",
+    "rating": "medium",
+    "interval": 0,
+    "easeFactor": 2.5,
+    "repetitions": 0,
+    "reviewedAt": "2026-09-30T10:00:00.000Z",
+    "nextInterval": 1,
+    "nextEaseFactor": 2.5,
+    "nextRepetitions": 1,
+    "dueAt": "2026-10-01T10:00:00.000Z"
+  },
+  {
+    "name": "novo fácil",
+    "rating": "easy",
+    "interval": 0,
+    "easeFactor": 2.5,
+    "repetitions": 0,
+    "reviewedAt": "2026-09-30T10:00:00.000Z",
+    "nextInterval": 4,
+    "nextEaseFactor": 2.65,
+    "nextRepetitions": 1,
+    "dueAt": "2026-10-04T10:00:00.000Z"
+  },
+  {
+    "name": "progresso novamente",
+    "rating": "again",
+    "interval": 4,
+    "easeFactor": 2.6,
+    "repetitions": 3,
+    "reviewedAt": "2026-09-30T10:00:00.000Z",
+    "nextInterval": 0,
+    "nextEaseFactor": 2.4,
+    "nextRepetitions": 0,
+    "dueAt": "2026-09-30T10:10:00.000Z"
+  },
+  {
+    "name": "progresso difícil",
+    "rating": "hard",
+    "interval": 4,
+    "easeFactor": 2.6,
+    "repetitions": 3,
+    "reviewedAt": "2026-09-30T10:00:00.000Z",
+    "nextInterval": 5,
+    "nextEaseFactor": 2.45,
+    "nextRepetitions": 4,
+    "dueAt": "2026-10-05T10:00:00.000Z"
+  },
+  {
+    "name": "progresso médio",
+    "rating": "medium",
+    "interval": 4,
+    "easeFactor": 2.6,
+    "repetitions": 3,
+    "reviewedAt": "2026-09-30T10:00:00.000Z",
+    "nextInterval": 10,
+    "nextEaseFactor": 2.6,
+    "nextRepetitions": 4,
+    "dueAt": "2026-10-10T10:00:00.000Z"
+  },
+  {
+    "name": "progresso fácil",
+    "rating": "easy",
+    "interval": 4,
+    "easeFactor": 2.6,
+    "repetitions": 3,
+    "reviewedAt": "2026-09-30T10:00:00.000Z",
+    "nextInterval": 12,
+    "nextEaseFactor": 2.75,
+    "nextRepetitions": 4,
+    "dueAt": "2026-10-12T10:00:00.000Z"
+  }
+]

@@ -33,7 +33,7 @@ void main() {
     expect(history.single.nextInterval, 4);
   });
 
-  test('dificuldade reinicia a repetição e agenda revisão curta', () async {
+  test('dificuldade preserva a progressão do rating hard do desktop', () async {
     final repository = InMemoryChallengeRepository(
       items: [
         Challenge(
@@ -49,13 +49,13 @@ void main() {
 
     await repository.recordReview(
       challengeId: 'challenge-1',
-      rating: 'difícil',
+      rating: 'hard',
       reviewedAt: reviewedAt,
     );
 
     final challenge = (await repository.getAll()).single;
-    expect(challenge.repetitions, 0);
-    expect(challenge.interval, 0);
-    expect(challenge.dueAt, reviewedAt.add(const Duration(minutes: 10)));
+    expect(challenge.repetitions, 3);
+    expect(challenge.interval, 6);
+    expect(challenge.dueAt, reviewedAt.add(const Duration(days: 6)));
   });
 }

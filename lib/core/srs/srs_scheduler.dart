@@ -82,8 +82,10 @@ class SrsScheduler {
 
   static String _normalizeRating(String rating) {
     final normalized = rating.trim().toLowerCase();
-    if (normalized == 'again' || normalized.contains('dif')) return 'again';
-    if (normalized == 'hard') return 'hard';
+    if (normalized == 'again' || normalized.contains('novamente')) {
+      return 'again';
+    }
+    if (normalized == 'hard' || normalized.contains('dif')) return 'hard';
     if (normalized == 'medium' || normalized == 'bom') return 'medium';
     if (normalized == 'easy' ||
         normalized.contains('fác') ||
