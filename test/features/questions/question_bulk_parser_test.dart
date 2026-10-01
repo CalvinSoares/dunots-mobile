@@ -74,4 +74,46 @@ Gabarito: 4-E
       expect(result.questions.single.correctAlternativeIndex, 1);
     },
   );
+
+  test(
+    'mantém alternativas e enunciados longos quando há quebras de linha',
+    () {
+      final result = parseBulkQuestions('''
+40. Em um sistema distribuído, considere o texto longo da questão com uma
+continuação que explica o cenário, incluindo expressões lógicas p → q.
+A) A primeira alternativa possui uma explicação extensa que continua na linha
+seguinte sem criar uma alternativa nova.
+B) Outra alternativa
+C) Terceira alternativa
+D) Quarta alternativa
+E) Quinta alternativa
+Gabarito: 40-A
+''');
+
+      expect(result.isValid, isTrue);
+      expect(result.questions.single.statement, contains('p → q'));
+      expect(
+        result.questions.single.alternatives.first.text,
+        contains('continua na linha seguinte'),
+      );
+    },
+  );
+
+  test('preserva blocos Java, SQL e tabelas com separação visual', () {
+    final result = parseBulkQuestions('''
+41. Analise o código Java e a tabela abaixo.
+public class L1 {
+  SELECT * FROM tabela;
+  return true;
+}
+A) Sim
+B) Não
+Gabarito: 41-B
+''');
+
+    expect(result.isValid, isTrue);
+    expect(result.questions.single.statement, contains('public class L1'));
+    expect(result.questions.single.statement, contains('\n'));
+    expect(result.questions.single.correctAlternativeIndex, 1);
+  });
 }

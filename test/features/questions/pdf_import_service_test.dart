@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:dunots_mobile/features/questions/pdf_import_service.dart';
@@ -14,6 +16,17 @@ PROVA 6 - ANÁLISE DE SISTEMAS
 
     expect(variants, hasLength(2));
     expect(variants.singleWhere((item) => item.version == '4').answers[2], 'B');
+    expect(variants.singleWhere((item) => item.version == '6').answers[1], 'D');
+  });
+
+  test('lê múltiplas versões quando o cabeçalho e as respostas estão na mesma linha', () {
+    final variants = parsePdfAnswerKey('''
+PROVA 4: 1-A 2-B 3-C
+VERSÃO 6 — 1-D 2-E 3-A
+''');
+
+    expect(variants, hasLength(2));
+    expect(variants.singleWhere((item) => item.version == '4').answers[3], 'C');
     expect(variants.singleWhere((item) => item.version == '6').answers[1], 'D');
   });
 
@@ -69,5 +82,76 @@ Gabarito: 21-C
     expect(parsed.questions.single.number, 21);
     expect(parsed.questions.single.statement, contains('Uma questão'));
     expect(parsed.questions.single.correctAlternativeIndex, 2);
+  });
+
+  test(
+    'ordena duas colunas da esquerda para a direita e de cima para baixo',
+    () {
+      final lines = [
+        for (var index = 0; index < 4; index++)
+          PdfExtractedLine(
+            pageNumber: 1,
+            text: 'Esquerda ${index + 1}',
+            bounds: Rect.fromLTWH(20, index * 20, 180, 12),
+          ),
+        for (var index = 0; index < 4; index++)
+          PdfExtractedLine(
+            pageNumber: 1,
+            text: 'Direita ${index + 1}',
+            bounds: Rect.fromLTWH(340, index * 20, 180, 12),
+          ),
+      ];
+
+      expect(orderPdfLinesForReading(lines).map((line) => line.text), [
+        'Esquerda 1',
+        'Esquerda 2',
+        'Esquerda 3',
+        'Esquerda 4',
+        'Direita 1',
+        'Direita 2',
+        'Direita 3',
+        'Direita 4',
+      ]);
+    },
+  );
+
+  test('remove cabeçalho, rodapé e número de página sem remover conteúdo', () {
+    final lines = [
+      const PdfExtractedLine(
+        pageNumber: 1,
+        text: 'TRANSPETRO',
+        bounds: Rect.fromLTWH(20, 10, 100, 10),
+      ),
+      const PdfExtractedLine(
+        pageNumber: 1,
+        text: 'Questão 1 sobre redes',
+        bounds: Rect.fromLTWH(20, 80, 300, 10),
+      ),
+      const PdfExtractedLine(
+        pageNumber: 1,
+        text: 'www.pciconcursos.com.br',
+        bounds: Rect.fromLTWH(20, 700, 200, 10),
+      ),
+      const PdfExtractedLine(
+        pageNumber: 1,
+        text: '16',
+        bounds: Rect.fromLTWH(500, 700, 20, 10),
+      ),
+    ];
+
+    expect(removePdfChromeForImport(lines).map((line) => line.text), [
+      'Questão 1 sobre redes',
+    ]);
+  });
+
+  test('marca questões com tabela, código e diagrama para preservar imagem da página', () {
+    final parsed = parseBulkQuestions('''
+1. A tabela abaixo mostra a consulta SQL.
+SELECT * FROM usuarios
+A) correta
+B) incorreta
+Gabarito: 1-A
+''');
+    expect(questionNeedsVisualSnapshot(parsed.questions.single), isTrue);
   });
 }

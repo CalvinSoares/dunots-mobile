@@ -44,6 +44,11 @@ void main() {
     await tester.enterText(find.byType(TextField).first, '');
     await tester.pumpAndSettle();
 
+    await tester.scrollUntilVisible(
+      find.text('Qual protocolo resolve nomes?'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.tap(find.text('Qual protocolo resolve nomes?'));
     await tester.pumpAndSettle();
     expect(find.byType(QuestionDetailsPage), findsOneWidget);
