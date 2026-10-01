@@ -116,13 +116,17 @@ class SyncPackage {
       );
     }
 
-    final exportedAtValue = json['exportedAt'];
     final collectionsValue = json['collections'];
-    if (exportedAtValue is! String || collectionsValue is! Map) {
+    if (collectionsValue is! Map) {
       throw const FormatException('O pacote de sincronização está incompleto.');
     }
 
-    final exportedAt = DateTime.tryParse(exportedAtValue);
+    final exportedAtValue = json['exportedAt'];
+    final exportedAt = exportedAtValue == null
+        ? DateTime.now().toUtc()
+        : exportedAtValue is String
+        ? DateTime.tryParse(exportedAtValue)
+        : null;
     if (exportedAt == null) {
       throw const FormatException('A data de exportação do pacote é inválida.');
     }
@@ -152,7 +156,12 @@ class SyncPackage {
 
     return SyncPackage(
       exportedAt: exportedAt,
-      source: SyncIdentity.fromJson(json['source']),
+      source: json['source'] == null
+          ? const SyncIdentity(
+              deviceId: 'unknown',
+              deviceName: 'Dispositivo desconhecido',
+            )
+          : SyncIdentity.fromJson(json['source']),
       collections: collections,
     );
   }

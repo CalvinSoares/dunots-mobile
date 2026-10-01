@@ -68,6 +68,16 @@ class SyncBackup {
   const SyncBackup({required this.id, required this.createdAt});
 }
 
+class SyncRestoreResult {
+  final String restoredBackupId;
+  final String safetyBackupId;
+
+  const SyncRestoreResult({
+    required this.restoredBackupId,
+    required this.safetyBackupId,
+  });
+}
+
 /// Persiste o contrato de sincronização e faz merge com o SQLite local.
 ///
 /// O arquivo `.dunots` é JSON UTF-8 com extensão própria. Isso o mantém
@@ -181,6 +191,59 @@ class SyncDatabaseRepository {
       throw StateError('Backup de sincronização não encontrado.');
     }
     return Uint8List.fromList(utf8.encode(rows.single['payload']! as String));
+  }
+
+  /// Restaura um snapshot completo e cria um backup de segurança antes dele.
+  ///
+  /// A identidade do dispositivo e a própria tabela de backups não fazem
+  /// parte do snapshot restaurado. Assim, o usuário não perde a capacidade de
+  /// sincronizar novamente nem o ponto de retorno criado automaticamente.
+  Future<SyncRestoreResult> restoreBackup(String id) async {
+    final safetyBackup = await createBackup();
+    final package = decodePackage(await readBackup(id));
+    const tables = [
+      'challenge_reviews',
+      'quiz_attempts',
+      'questions',
+      'study_node_materials',
+      'study_nodes',
+      'study_tracks',
+      'flashcards',
+      'challenges',
+      'study_phases',
+      'diagrams',
+      'quiz_exams',
+      'sync_tombstones',
+    ];
+
+    await database.transaction((transaction) async {
+      for (final table in tables) {
+        await transaction.delete(table);
+      }
+      for (final collection in SyncCollections.all) {
+        if (!supportedCollections.contains(collection) ||
+            collection == SyncCollections.syncTombstones) {
+          continue;
+        }
+        for (final record in package.recordsFor(collection)) {
+          await _upsert(transaction, collection, record);
+        }
+      }
+      for (final tombstone in package.recordsFor(
+        SyncCollections.syncTombstones,
+      )) {
+        await transaction.insert(
+          'sync_tombstones',
+          _tombstoneRow(tombstone),
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+    });
+
+    return SyncRestoreResult(
+      restoredBackupId: id,
+      safetyBackupId: safetyBackup.id,
+    );
   }
 
   Future<Uint8List> exportBytes() async {
@@ -582,7 +645,8 @@ class SyncDatabaseRepository {
       'description': _string(row['description']),
       'completedItems': row['completed_items'],
       'totalItems': row['total_items'],
-      'updatedAt': '1970-01-01T00:00:00.000Z',
+      'createdAt': _string(row['created_at']),
+      'updatedAt': _string(row['updated_at']),
     });
   }
 
@@ -597,7 +661,8 @@ class SyncDatabaseRepository {
       'isCompleted': row['is_completed'] == 1,
       'notes': _string(row['notes']),
       'priority': row['priority'],
-      'updatedAt': '1970-01-01T00:00:00.000Z',
+      'createdAt': _string(row['created_at']),
+      'updatedAt': _string(row['updated_at']),
     });
   }
 
@@ -608,7 +673,7 @@ class SyncDatabaseRepository {
       'nodeId': _string(row['node_id']),
       'materialId': _string(row['material_id']),
       'materialType': _string(row['material_type']),
-      'updatedAt': '1970-01-01T00:00:00.000Z',
+      'updatedAt': _string(row['updated_at']),
     });
   }
 
@@ -760,6 +825,8 @@ class SyncDatabaseRepository {
           'description': _string(values['description']),
           'completed_items': values['completedItems'] ?? 0,
           'total_items': values['totalItems'] ?? 0,
+          'created_at': _string(values['createdAt']),
+          'updated_at': _string(values['updatedAt']),
         }, conflictAlgorithm: ConflictAlgorithm.replace);
         return;
       case SyncCollections.roadmapNodes:
@@ -773,6 +840,8 @@ class SyncDatabaseRepository {
           'is_completed': values['isCompleted'] == true ? 1 : 0,
           'notes': _string(values['notes']),
           'priority': values['priority'] ?? 0,
+          'created_at': _string(values['createdAt']),
+          'updated_at': _string(values['updatedAt']),
         }, conflictAlgorithm: ConflictAlgorithm.replace);
         return;
       case SyncCollections.roadmapLinks:
@@ -780,6 +849,7 @@ class SyncDatabaseRepository {
           'node_id': _string(values['nodeId']),
           'material_id': _string(values['materialId']),
           'material_type': _string(values['materialType']),
+          'updated_at': _string(values['updatedAt']),
         }, conflictAlgorithm: ConflictAlgorithm.replace);
         return;
     }
