@@ -1,0 +1,90 @@
+{
+  "format": "dunots-sync",
+  "version": 1,
+  "exportedAt": "2026-10-01T12:00:00.000Z",
+  "source": {
+    "deviceId": "mobile-fixture-1",
+    "deviceName": "Dunots Mobile"
+  },
+  "collections": {
+    "flashcards": [
+      {
+        "id": "mobile-card-1",
+        "question": "O que é uma VLAN?",
+        "answer": "Uma rede lógica segmentada.",
+        "front": "O que é uma VLAN?",
+        "back": "Uma rede lógica segmentada.",
+        "codeSnippet": "",
+        "language": "",
+        "tags": ["redes"],
+        "linkedMaterialIds": [],
+        "diagramIds": [],
+        "createdAt": "2026-09-20T12:00:00.000Z",
+        "updatedAt": "2026-10-01T12:00:00.000Z",
+        "nextReviewAt": "2026-10-02T12:00:00.000Z",
+        "lastReviewAt": null,
+        "reviewCount": 1,
+        "lastRating": "good",
+        "interval": 2,
+        "easeFactor": 2.5,
+        "repetitions": 1
+      }
+    ],
+    "leetcode_problems": [],
+    "challenge_reviews": [],
+    "articles": [],
+    "snippets": [],
+    "study_phases": [
+      {
+        "id": "mobile-phase-1",
+        "title": "Redes",
+        "description": "Revisão",
+        "flashcardIds": ["mobile-card-1"],
+        "problemIds": [],
+        "sortOrder": 0,
+        "createdAt": "2026-09-20T12:00:00.000Z",
+        "updatedAt": "2026-10-01T12:00:00.000Z"
+      }
+    ],
+    "diagrams": [],
+    "quiz_exams": [],
+    "quiz_questions": [],
+    "quiz_attempts": [],
+    "study_roadmaps": [
+      {
+        "id": "mobile-track-1",
+        "title": "Trilha de redes",
+        "description": "Fundamentos",
+        "completedItems": 0,
+        "totalItems": 1,
+        "createdAt": "2026-09-20T12:00:00.000Z",
+        "updatedAt": "2026-10-01T12:00:00.000Z"
+      }
+    ],
+    "roadmap_nodes": [
+      {
+        "id": "mobile-node-1",
+        "trackId": "mobile-track-1",
+        "parentId": null,
+        "title": "Arquiteturas",
+        "description": "",
+        "sortOrder": 0,
+        "isCompleted": false,
+        "notes": "",
+        "priority": 0,
+        "createdAt": "2026-09-20T12:00:00.000Z",
+        "updatedAt": "2026-10-01T12:00:00.000Z"
+      }
+    ],
+    "roadmap_links": [
+      {
+        "id": "mobile-node-1:mobile-card-1:flashcard",
+        "nodeId": "mobile-node-1",
+        "materialId": "mobile-card-1",
+        "materialType": "flashcard",
+        "updatedAt": "2026-10-01T12:00:00.000Z"
+      }
+    ],
+    "sync_tombstones": []
+  }
+}

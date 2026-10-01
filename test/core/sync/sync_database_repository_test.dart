@@ -91,6 +91,38 @@ void main() {
     },
   );
 
+  test('aceita pacote legado sem metadados opcionais do envelope', () async {
+    final database = await AppDatabase.open(
+      databasePathOverride: inMemoryDatabasePath,
+    );
+    final repository = SyncDatabaseRepository(database.database);
+    final package = repository.decodePackage(
+      Uint8List.fromList(
+        utf8.encode(
+          jsonEncode({
+            'format': 'dunots-sync',
+            'version': 1,
+            'collections': {
+              'flashcards': [
+                {'id': 'legacy-card', 'question': 'Frente antiga'},
+              ],
+            },
+          }),
+        ),
+      ),
+    );
+
+    expect(package.source.deviceId, 'unknown');
+    expect(package.source.deviceName, 'Dispositivo desconhecido');
+    expect(package.exportedAt, isNotNull);
+    expect(
+      package.recordsFor(SyncCollections.flashcards).single.values['question'],
+      'Frente antiga',
+    );
+
+    await database.close();
+  });
+
   test(
     'exporta pacote mobile com nomes e campos aceitos pelo desktop',
     () async {
@@ -144,6 +176,130 @@ void main() {
     },
   );
 
+  test('exporta timestamps reais para trilha, tópico e vínculo', () async {
+    final database = await AppDatabase.open(
+      databasePathOverride: inMemoryDatabasePath,
+    );
+    final repository = SyncDatabaseRepository(database.database);
+    final createdAt = DateTime.utc(2026, 9, 30, 8);
+    final updatedAt = DateTime.utc(2026, 10, 1, 9);
+
+    await database.database.insert('study_tracks', {
+      'id': 'track-sync',
+      'title': 'Redes',
+      'description': 'Base',
+      'created_at': createdAt.toIso8601String(),
+      'updated_at': updatedAt.toIso8601String(),
+    });
+    await database.database.insert('study_nodes', {
+      'id': 'node-sync',
+      'track_id': 'track-sync',
+      'title': 'OSI',
+      'description': 'Camadas',
+      'created_at': createdAt.toIso8601String(),
+      'updated_at': updatedAt.toIso8601String(),
+    });
+    await database.database.insert('study_node_materials', {
+      'node_id': 'node-sync',
+      'material_id': 'card-sync',
+      'material_type': 'flashcard',
+      'updated_at': updatedAt.toIso8601String(),
+    });
+
+    final package = await repository.exportPackage();
+    final track = package.recordsFor(SyncCollections.studyRoadmaps).single;
+    final node = package.recordsFor(SyncCollections.roadmapNodes).single;
+    final link = package.recordsFor(SyncCollections.roadmapLinks).single;
+
+    expect(track.values['createdAt'], createdAt.toIso8601String());
+    expect(track.values['updatedAt'], updatedAt.toIso8601String());
+    expect(node.values['createdAt'], createdAt.toIso8601String());
+    expect(node.values['updatedAt'], updatedAt.toIso8601String());
+    expect(link.values['updatedAt'], updatedAt.toIso8601String());
+    expect(track.values['updatedAt'], isNot('1970-01-01T00:00:00.000Z'));
+
+    await database.close();
+  });
+
+  test('importa timestamps recebidos de trilha, tópico e vínculo', () async {
+    final database = await AppDatabase.open(
+      databasePathOverride: inMemoryDatabasePath,
+    );
+    final repository = SyncDatabaseRepository(database.database);
+    final package = SyncPackage(
+      exportedAt: DateTime.utc(2026, 10, 1),
+      source: const SyncIdentity(
+        deviceId: 'desktop-sync',
+        deviceName: 'Desktop',
+      ),
+      collections: {
+        SyncCollections.studyRoadmaps: [
+          SyncRecord({
+            'id': 'track-received',
+            'title': 'Trilha recebida',
+            'description': 'Descrição',
+            'completedItems': 1,
+            'totalItems': 2,
+            'createdAt': '2026-09-30T08:00:00.000Z',
+            'updatedAt': '2026-10-01T09:00:00.000Z',
+          }),
+        ],
+        SyncCollections.roadmapNodes: [
+          SyncRecord({
+            'id': 'node-received',
+            'trackId': 'track-received',
+            'parentId': null,
+            'title': 'Tópico',
+            'description': 'Descrição',
+            'sortOrder': 0,
+            'isCompleted': false,
+            'notes': '',
+            'priority': 0,
+            'createdAt': '2026-09-30T08:00:00.000Z',
+            'updatedAt': '2026-10-01T09:00:00.000Z',
+          }),
+        ],
+        SyncCollections.roadmapLinks: [
+          SyncRecord({
+            'id': 'node-received:card-received:flashcard',
+            'nodeId': 'node-received',
+            'materialId': 'card-received',
+            'materialType': 'flashcard',
+            'updatedAt': '2026-10-01T09:00:00.000Z',
+          }),
+        ],
+      },
+    );
+
+    final preview = await repository.preview(package);
+    await repository.apply(
+      preview,
+      defaultResolution: SyncConflictResolution.useReceived,
+    );
+
+    final track = (await database.database.query(
+      'study_tracks',
+      where: 'id = ?',
+      whereArgs: ['track-received'],
+    )).single;
+    final node = (await database.database.query(
+      'study_nodes',
+      where: 'id = ?',
+      whereArgs: ['node-received'],
+    )).single;
+    final link = (await database.database.query(
+      'study_node_materials',
+      where: 'node_id = ?',
+      whereArgs: ['node-received'],
+    )).single;
+
+    expect(track['updated_at'], '2026-10-01T09:00:00.000Z');
+    expect(node['updated_at'], '2026-10-01T09:00:00.000Z');
+    expect(link['updated_at'], '2026-10-01T09:00:00.000Z');
+
+    await database.close();
+  });
+
   test('cria e recupera backup antes de aplicar uma mesclagem', () async {
     final database = await AppDatabase.open(
       databasePathOverride: inMemoryDatabasePath,
@@ -178,6 +334,89 @@ void main() {
 
     await database.close();
   });
+
+  test(
+    'restaura backup pela camada de persistência e cria backup de segurança',
+    () async {
+      final database = await AppDatabase.open(
+        databasePathOverride: inMemoryDatabasePath,
+      );
+      final repository = SyncDatabaseRepository(database.database);
+      await database.database.insert('flashcards', {
+        'id': 'restore-card',
+        'front': 'Estado que será restaurado',
+        'back': 'Resposta',
+        'created_at': '2026-09-30T00:00:00.000Z',
+        'due_at': '2026-09-30T00:00:00.000Z',
+        'updated_at': '2026-09-30T00:00:00.000Z',
+      });
+      await database.database.insert('study_tracks', {
+        'id': 'restore-track',
+        'title': 'Trilha restaurada',
+        'description': 'Descrição',
+        'created_at': '2026-09-30T00:00:00.000Z',
+        'updated_at': '2026-09-30T00:00:00.000Z',
+      });
+      await database.database.insert('study_nodes', {
+        'id': 'restore-node',
+        'track_id': 'restore-track',
+        'title': 'Tópico restaurado',
+        'description': '',
+        'created_at': '2026-09-30T00:00:00.000Z',
+        'updated_at': '2026-09-30T00:00:00.000Z',
+      });
+      await database.database.insert('study_node_materials', {
+        'node_id': 'restore-node',
+        'material_id': 'restore-card',
+        'material_type': 'flashcard',
+        'updated_at': '2026-09-30T00:00:00.000Z',
+      });
+
+      final originalBackup = await repository.createBackup();
+      await database.database.update(
+        'flashcards',
+        {'front': 'Estado alterado'},
+        where: 'id = ?',
+        whereArgs: ['restore-card'],
+      );
+      await database.database.insert('flashcards', {
+        'id': 'extra-card',
+        'front': 'Não existia no backup',
+        'back': 'Resposta',
+        'created_at': '2026-09-30T00:00:00.000Z',
+        'due_at': '2026-09-30T00:00:00.000Z',
+        'updated_at': '2026-09-30T00:00:00.000Z',
+      });
+
+      final result = await repository.restoreBackup(originalBackup.id);
+      final cards = await database.database.query(
+        'flashcards',
+        orderBy: 'id ASC',
+      );
+
+      expect(result.restoredBackupId, originalBackup.id);
+      expect(result.safetyBackupId, isNot(originalBackup.id));
+      expect(cards, hasLength(1));
+      expect(cards.single['id'], 'restore-card');
+      expect(cards.single['front'], 'Estado que será restaurado');
+      expect(
+        (await database.database.query('study_tracks')).single['title'],
+        'Trilha restaurada',
+      );
+      expect(
+        (await database.database.query('study_nodes')).single['title'],
+        'Tópico restaurado',
+      );
+      expect(
+        (await database.database.query('study_node_materials'))
+            .single['updated_at'],
+        '2026-09-30T00:00:00.000Z',
+      );
+      expect(await repository.listBackups(), hasLength(2));
+
+      await database.close();
+    },
+  );
 
   test('atualiza bancos das versões 22 e 23 para o esquema atual', () async {
     for (final oldVersion in [22, 23]) {
@@ -214,6 +453,55 @@ void main() {
       await migrated.close();
       await directory.delete(recursive: true);
     }
+  });
+
+  test('migra bancos da versão 25 sem deixar timestamps em 1970', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'dunots-timestamp-migration-',
+    );
+    final databasePath = path.join(directory.path, 'legacy.db');
+    final current = await AppDatabase.open(databasePathOverride: databasePath);
+    await current.database.insert('study_tracks', {
+      'id': 'legacy-track',
+      'title': 'Legado',
+      'description': '',
+      'created_at': '',
+      'updated_at': '',
+    });
+    await current.database.insert('study_nodes', {
+      'id': 'legacy-node',
+      'track_id': 'legacy-track',
+      'title': 'Tópico legado',
+      'description': '',
+      'created_at': '',
+      'updated_at': '',
+    });
+    await current.database.insert('study_node_materials', {
+      'node_id': 'legacy-node',
+      'material_id': 'legacy-card',
+      'material_type': 'flashcard',
+      'updated_at': '',
+    });
+    await current.close();
+
+    final raw = await databaseFactory.openDatabase(databasePath);
+    await raw.execute('PRAGMA user_version = 25');
+    await raw.close();
+
+    final migrated = await AppDatabase.open(databasePathOverride: databasePath);
+    final track = (await migrated.database.query('study_tracks')).single;
+    final node = (await migrated.database.query('study_nodes')).single;
+    final link = (await migrated.database.query('study_node_materials')).single;
+
+    expect(track['created_at'], isNotEmpty);
+    expect(track['updated_at'], isNotEmpty);
+    expect(node['created_at'], isNotEmpty);
+    expect(node['updated_at'], isNotEmpty);
+    expect(link['updated_at'], isNotEmpty);
+    expect(track['updated_at'], isNot('1970-01-01T00:00:00.000Z'));
+
+    await migrated.close();
+    await directory.delete(recursive: true);
   });
 
   test(
