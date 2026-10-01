@@ -8,6 +8,8 @@ import '../features/questions/data/quiz_exam_repository.dart';
 import '../features/quizzes/data/quiz_attempt_repository.dart';
 import '../features/roadmaps/data/study_node_repository.dart';
 import '../features/roadmaps/data/study_material_repository.dart';
+import '../features/roadmaps/data/study_document_repository.dart';
+import '../features/roadmaps/data/study_material_progress_repository.dart';
 import '../features/roadmaps/data/study_track_repository.dart';
 import '../features/challenges/data/challenge_repository.dart';
 import '../features/diagrams/data/diagram_repository.dart';
@@ -33,6 +35,8 @@ class DunotsMobileApp extends StatelessWidget {
   final ChallengeRepository? challengeRepository;
   final DiagramRepository? diagramRepository;
   final StudyPhaseRepository? phaseRepository;
+  final StudyDocumentRepository? documentRepository;
+  final StudyMaterialProgressRepository? materialProgressRepository;
 
   const DunotsMobileApp({
     super.key,
@@ -50,6 +54,8 @@ class DunotsMobileApp extends StatelessWidget {
     this.challengeRepository,
     this.diagramRepository,
     this.phaseRepository,
+    this.documentRepository,
+    this.materialProgressRepository,
   });
 
   @override
@@ -74,6 +80,8 @@ class DunotsMobileApp extends StatelessWidget {
         challengeRepository: challengeRepository,
         diagramRepository: diagramRepository,
         phaseRepository: phaseRepository,
+        documentRepository: documentRepository,
+        materialProgressRepository: materialProgressRepository,
       ),
     );
   }

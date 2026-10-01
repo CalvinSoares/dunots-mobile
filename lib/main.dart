@@ -10,6 +10,8 @@ import 'package:dunots_mobile/features/flashcards/flashcard_demo_data.dart';
 import 'package:dunots_mobile/features/roadmaps/data/sqlite_study_node_repository.dart';
 import 'package:dunots_mobile/features/roadmaps/data/sqlite_study_node_material_repository.dart';
 import 'package:dunots_mobile/features/roadmaps/data/sqlite_study_track_repository.dart';
+import 'package:dunots_mobile/features/roadmaps/data/sqlite_study_document_repository.dart';
+import 'package:dunots_mobile/features/roadmaps/data/sqlite_study_material_progress_repository.dart';
 import 'package:dunots_mobile/features/questions/data/sqlite_question_repository.dart';
 import 'package:dunots_mobile/features/questions/data/sqlite_quiz_exam_repository.dart';
 import 'package:dunots_mobile/features/questions/question_demo_data.dart';
@@ -66,6 +68,10 @@ Future<void> main() async {
       challengeRepository: SqliteChallengeRepository(database),
       diagramRepository: SqliteDiagramRepository(database),
       phaseRepository: SqliteStudyPhaseRepository(database),
+      documentRepository: SqliteStudyDocumentRepository(database),
+      materialProgressRepository: SqliteStudyMaterialProgressRepository(
+        database,
+      ),
       localNotificationService: notificationService,
     ),
   );

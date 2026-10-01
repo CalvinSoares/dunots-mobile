@@ -11,6 +11,8 @@ import '../features/flashcards/flashcards_preview_page.dart';
 import '../features/more/more_page.dart';
 import '../features/roadmaps/data/study_node_repository.dart';
 import '../features/roadmaps/data/study_material_repository.dart';
+import '../features/roadmaps/data/study_document_repository.dart';
+import '../features/roadmaps/data/study_material_progress_repository.dart';
 import '../features/roadmaps/data/study_track_repository.dart';
 import '../features/roadmaps/roadmaps_preview_page.dart';
 import '../features/today/today_page.dart';
@@ -39,6 +41,8 @@ class DunotsHomeShell extends StatefulWidget {
   final ChallengeRepository? challengeRepository;
   final DiagramRepository? diagramRepository;
   final StudyPhaseRepository? phaseRepository;
+  final StudyDocumentRepository? documentRepository;
+  final StudyMaterialProgressRepository? materialProgressRepository;
 
   const DunotsHomeShell({
     super.key,
@@ -56,6 +60,8 @@ class DunotsHomeShell extends StatefulWidget {
     this.challengeRepository,
     this.diagramRepository,
     this.phaseRepository,
+    this.documentRepository,
+    this.materialProgressRepository,
   });
 
   @override
@@ -111,6 +117,9 @@ class _DunotsHomeShellState extends State<DunotsHomeShell> {
         questionRepository: widget.questionRepository,
         attemptRepository: widget.attemptRepository,
         diagramRepository: widget.diagramRepository,
+        challengeRepository: widget.challengeRepository,
+        documentRepository: widget.documentRepository,
+        materialProgressRepository: widget.materialProgressRepository,
       ),
       const MorePage(),
     ];
