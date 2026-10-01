@@ -1,16 +1,21 @@
+import '../../core/srs/srs_scheduler.dart';
+
 class FlashcardScheduler {
   const FlashcardScheduler._();
 
   static DateTime nextReviewAt({
     required String rating,
     required DateTime reviewedAt,
+    int interval = 0,
+    double easeFactor = SrsScheduler.defaultEaseFactor,
+    int repetitions = 0,
   }) {
-    final delay = switch (rating) {
-      'difícil' => const Duration(minutes: 10),
-      'bom' => const Duration(days: 1),
-      'fácil' => const Duration(days: 3),
-      _ => throw ArgumentError.value(rating, 'rating'),
-    };
-    return reviewedAt.add(delay);
+    return SrsScheduler.next(
+      rating: rating,
+      reviewedAt: reviewedAt,
+      interval: interval,
+      easeFactor: easeFactor,
+      repetitions: repetitions,
+    ).dueAt;
   }
 }

@@ -3,16 +3,20 @@ import 'package:flutter/material.dart';
 import 'package:dunots_mobile/core/models/flashcard.dart';
 
 import '../roadmaps/domain/study_material.dart';
+import '../diagrams/diagram_link_dialog.dart';
+import '../diagrams/domain/study_diagram.dart';
 import 'flashcard_material_link_dialog.dart';
 
 class FlashcardFormDialog extends StatefulWidget {
   final Flashcard? initialCard;
   final List<StudyMaterial> availableMaterials;
+  final List<StudyDiagram> availableDiagrams;
 
   const FlashcardFormDialog({
     super.key,
     this.initialCard,
     this.availableMaterials = const [],
+    this.availableDiagrams = const [],
   });
 
   @override
@@ -25,6 +29,7 @@ class _FlashcardFormDialogState extends State<FlashcardFormDialog> {
   late final TextEditingController _codeController;
   late final TextEditingController _tagsController;
   late Set<String> _linkedMaterialIds;
+  late Set<String> _linkedDiagramIds;
   String? _validationError;
 
   bool get _isEditing => widget.initialCard != null;
@@ -38,6 +43,7 @@ class _FlashcardFormDialogState extends State<FlashcardFormDialog> {
     _codeController = TextEditingController(text: card?.code ?? '');
     _tagsController = TextEditingController(text: card?.tags.join(', ') ?? '');
     _linkedMaterialIds = {...?card?.linkedMaterialIds};
+    _linkedDiagramIds = {...?card?.diagramIds};
   }
 
   @override
@@ -66,6 +72,21 @@ class _FlashcardFormDialogState extends State<FlashcardFormDialog> {
                 decoration: const InputDecoration(
                   labelText: 'Pergunta',
                   hintText: 'Frente do flashcard',
+                ),
+              ),
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: OutlinedButton.icon(
+                  onPressed: widget.availableDiagrams.isEmpty
+                      ? null
+                      : _chooseDiagrams,
+                  icon: const Icon(Icons.account_tree_outlined),
+                  label: Text(
+                    _linkedDiagramIds.isEmpty
+                        ? 'Vincular fluxogramas'
+                        : 'Fluxogramas vinculados: ${_linkedDiagramIds.length}',
+                  ),
                 ),
               ),
               const SizedBox(height: 12),
@@ -173,8 +194,22 @@ class _FlashcardFormDialogState extends State<FlashcardFormDialog> {
             code: _codeController.text.trim(),
             tags: tags,
             linkedMaterialIds: _linkedMaterialIds.toList(growable: false),
+            diagramIds: _linkedDiagramIds.toList(growable: false),
           ),
     );
+  }
+
+  Future<void> _chooseDiagrams() async {
+    final selected = await showDialog<List<String>>(
+      context: context,
+      builder: (_) => DiagramLinkDialog(
+        diagrams: widget.availableDiagrams,
+        initialSelectedIds: _linkedDiagramIds,
+      ),
+    );
+    if (selected != null && mounted) {
+      setState(() => _linkedDiagramIds = selected.toSet());
+    }
   }
 
   Future<void> _chooseMaterials() async {

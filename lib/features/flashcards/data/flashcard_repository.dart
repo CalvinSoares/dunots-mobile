@@ -1,4 +1,5 @@
 import 'package:dunots_mobile/core/models/flashcard.dart';
+import 'package:dunots_mobile/core/srs/srs_scheduler.dart';
 
 import '../flashcard_demo_data.dart';
 
@@ -57,11 +58,22 @@ class InMemoryFlashcardRepository implements FlashcardRepository {
       throw StateError('Flashcard não encontrado.');
     }
     final card = _cards[index];
+    final schedule = SrsScheduler.next(
+      rating: rating,
+      reviewedAt: reviewedAt,
+      interval: card.interval,
+      easeFactor: card.easeFactor,
+      repetitions: card.repetitions,
+    );
     _cards[index] = card.copyWith(
-      dueAt: dueAt,
+      dueAt: schedule.dueAt,
       lastReviewedAt: reviewedAt,
       reviewCount: card.reviewCount + 1,
       lastRating: rating,
+      interval: schedule.interval,
+      easeFactor: schedule.easeFactor,
+      repetitions: schedule.repetitions,
+      updatedAt: reviewedAt,
     );
   }
 }

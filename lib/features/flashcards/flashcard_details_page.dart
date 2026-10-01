@@ -206,6 +206,21 @@ class FlashcardDetailsPage extends StatelessWidget {
             ],
           ),
         );
+      case StudyMaterialType.diagram:
+        if (!context.mounted) return;
+        await showDialog<void>(
+          context: context,
+          builder: (_) => AlertDialog(
+            title: Text(material.title),
+            content: Text(material.subtitle),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Fechar'),
+              ),
+            ],
+          ),
+        );
     }
   }
 
@@ -214,6 +229,7 @@ class FlashcardDetailsPage extends StatelessWidget {
       StudyMaterialType.flashcard => Icons.style_outlined,
       StudyMaterialType.question => Icons.quiz_outlined,
       StudyMaterialType.document => Icons.description_outlined,
+      StudyMaterialType.diagram => Icons.account_tree_outlined,
     };
   }
 }

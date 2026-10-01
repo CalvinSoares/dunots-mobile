@@ -13,6 +13,8 @@ import 'data/flashcard_review_preferences_repository.dart';
 import 'data/flashcard_session_repository.dart';
 import '../roadmaps/data/study_material_catalog_repository.dart';
 import '../roadmaps/domain/study_material.dart';
+import '../diagrams/data/diagram_repository.dart';
+import '../diagrams/domain/study_diagram.dart';
 import 'flashcard_form_dialog.dart';
 import 'flashcard_list_item.dart';
 import 'flashcard_progress_page.dart';
@@ -24,6 +26,7 @@ class FlashcardsPreviewPage extends StatefulWidget {
   final QuestionRepository? questionRepository;
   final FlashcardSessionRepository? sessionRepository;
   final FlashcardReviewPreferencesRepository? preferencesRepository;
+  final DiagramRepository? diagramRepository;
 
   const FlashcardsPreviewPage({
     super.key,
@@ -31,6 +34,7 @@ class FlashcardsPreviewPage extends StatefulWidget {
     this.questionRepository,
     this.sessionRepository,
     this.preferencesRepository,
+    this.diagramRepository,
   });
 
   @override
@@ -50,6 +54,7 @@ class _FlashcardsPreviewPageState extends State<FlashcardsPreviewPage> {
   String _sort = 'due';
   int _dailyLimit = 20;
   int _dailyGoal = 20;
+  int _weeklyGoal = 100;
   bool _preferRecommended = false;
   bool _reminderEnabled = true;
   int _reminderHour = 0;
@@ -341,6 +346,7 @@ class _FlashcardsPreviewPageState extends State<FlashcardsPreviewPage> {
     setState(() {
       _dailyLimit = preferences.dailyLimit;
       _dailyGoal = preferences.dailyGoal;
+      _weeklyGoal = preferences.weeklyGoal;
       _sort = preferences.sort;
       _preferRecommended = preferences.preferRecommended;
       _reminderEnabled = preferences.reminderEnabled;
@@ -369,6 +375,7 @@ class _FlashcardsPreviewPageState extends State<FlashcardsPreviewPage> {
       FlashcardReviewPreferences(
         dailyLimit: _dailyLimit,
         dailyGoal: _dailyGoal,
+        weeklyGoal: _weeklyGoal,
         sort: _sort,
         preferRecommended: _preferRecommended,
         reminderEnabled: _reminderEnabled,
@@ -632,10 +639,15 @@ class _FlashcardsPreviewPageState extends State<FlashcardsPreviewPage> {
 
   Future<void> _createFlashcard() async {
     final materials = await _loadAvailableMaterials();
+    final diagrams =
+        await widget.diagramRepository?.getAll() ?? const <StudyDiagram>[];
     if (!mounted) return;
     final card = await showDialog<Flashcard>(
       context: context,
-      builder: (_) => FlashcardFormDialog(availableMaterials: materials),
+      builder: (_) => FlashcardFormDialog(
+        availableMaterials: materials,
+        availableDiagrams: diagrams,
+      ),
     );
     if (card == null || !mounted) return;
     await _save(() => _repository.create(card));
@@ -645,11 +657,16 @@ class _FlashcardsPreviewPageState extends State<FlashcardsPreviewPage> {
     final materials = await _loadAvailableMaterials(
       excludedMaterialId: card.id,
     );
+    final diagrams =
+        await widget.diagramRepository?.getAll() ?? const <StudyDiagram>[];
     if (!mounted) return;
     final updated = await showDialog<Flashcard>(
       context: context,
-      builder: (_) =>
-          FlashcardFormDialog(initialCard: card, availableMaterials: materials),
+      builder: (_) => FlashcardFormDialog(
+        initialCard: card,
+        availableMaterials: materials,
+        availableDiagrams: diagrams,
+      ),
     );
     if (updated == null || !mounted) return;
     await _save(() => _repository.update(updated));

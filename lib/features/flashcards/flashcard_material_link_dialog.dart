@@ -120,6 +120,7 @@ class _FlashcardMaterialLinkDialogState
       StudyMaterialType.flashcard => Icons.style_outlined,
       StudyMaterialType.question => Icons.quiz_outlined,
       StudyMaterialType.document => Icons.description_outlined,
+      StudyMaterialType.diagram => Icons.account_tree_outlined,
     };
   }
 }

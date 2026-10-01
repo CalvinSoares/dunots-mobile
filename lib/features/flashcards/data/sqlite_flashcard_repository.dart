@@ -4,6 +4,7 @@ import 'package:sqflite/sqflite.dart';
 
 import 'package:dunots_mobile/core/database/app_database.dart';
 import 'package:dunots_mobile/core/models/flashcard.dart';
+import 'package:dunots_mobile/core/srs/srs_scheduler.dart';
 
 import 'flashcard_repository.dart';
 
@@ -59,38 +60,24 @@ class SqliteFlashcardRepository implements FlashcardRepository {
     final currentInterval = rows.first['interval'] as int? ?? 0;
     final currentEase = (rows.first['ease_factor'] as num?)?.toDouble() ?? 2.5;
     final currentRepetitions = rows.first['repetitions'] as int? ?? 0;
-    final normalizedRating = rating.toLowerCase();
-    final isAgain =
-        normalizedRating.contains('dif') || normalizedRating.contains('again');
-    final isEasy =
-        normalizedRating.contains('fác') ||
-        normalizedRating.contains('fac') ||
-        normalizedRating.contains('easy');
-    final nextEase = isAgain
-        ? (currentEase - 0.2).clamp(1.3, 3.0).toDouble()
-        : isEasy
-        ? (currentEase + 0.15).clamp(1.3, 3.0).toDouble()
-        : currentEase;
-    final nextInterval = isAgain
-        ? 0
-        : currentInterval == 0
-        ? (isEasy ? 2 : 1)
-        : (currentInterval * nextEase * (isEasy ? 1.3 : 1.0)).round().clamp(
-            1,
-            3650,
-          );
-    final nextRepetitions = isAgain ? 0 : currentRepetitions + 1;
+    final schedule = SrsScheduler.next(
+      rating: rating,
+      reviewedAt: reviewedAt,
+      interval: currentInterval,
+      easeFactor: currentEase,
+      repetitions: currentRepetitions,
+    );
     final updated = await database.rawUpdate(
       'UPDATE flashcards SET due_at = ?, last_reviewed_at = ?, '
       'review_count = review_count + 1, last_rating = ?, interval = ?, '
       'ease_factor = ?, repetitions = ?, updated_at = ? WHERE id = ?',
       [
-        dueAt.toIso8601String(),
+        schedule.dueAt.toIso8601String(),
         reviewedAt.toIso8601String(),
         rating,
-        nextInterval,
-        nextEase,
-        nextRepetitions,
+        schedule.interval,
+        schedule.easeFactor,
+        schedule.repetitions,
         reviewedAt.toIso8601String(),
         cardId,
       ],
@@ -106,6 +93,8 @@ class SqliteFlashcardRepository implements FlashcardRepository {
       'front': card.front,
       'back': card.back,
       'code': card.code,
+      'language': card.language,
+      'quiz_question_id': card.quizQuestionId,
       'tags': jsonEncode(card.tags),
       'linked_material_ids': jsonEncode(card.linkedMaterialIds),
       'diagram_ids': jsonEncode(card.diagramIds),
@@ -128,6 +117,8 @@ class SqliteFlashcardRepository implements FlashcardRepository {
       front: row['front']! as String,
       back: row['back']! as String,
       code: row['code'] as String? ?? '',
+      language: row['language'] as String? ?? '',
+      quizQuestionId: row['quiz_question_id'] as String?,
       tags: _parseTags(row['tags']),
       linkedMaterialIds: _parseTags(row['linked_material_ids']),
       diagramIds: _parseTags(row['diagram_ids']),

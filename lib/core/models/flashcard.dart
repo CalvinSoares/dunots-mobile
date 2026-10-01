@@ -3,6 +3,8 @@ class Flashcard {
   final String front;
   final String back;
   final String code;
+  final String language;
+  final String? quizQuestionId;
   final List<String> tags;
   final List<String> linkedMaterialIds;
   final List<String> diagramIds;
@@ -21,6 +23,8 @@ class Flashcard {
     required this.front,
     required this.back,
     this.code = '',
+    this.language = '',
+    this.quizQuestionId,
     this.tags = const [],
     this.linkedMaterialIds = const [],
     this.diagramIds = const [],
@@ -40,6 +44,8 @@ class Flashcard {
     String? front,
     String? back,
     String? code,
+    String? language,
+    String? quizQuestionId,
     List<String>? tags,
     List<String>? linkedMaterialIds,
     List<String>? diagramIds,
@@ -58,6 +64,8 @@ class Flashcard {
       front: front ?? this.front,
       back: back ?? this.back,
       code: code ?? this.code,
+      language: language ?? this.language,
+      quizQuestionId: quizQuestionId ?? this.quizQuestionId,
       tags: tags ?? this.tags,
       linkedMaterialIds: linkedMaterialIds ?? this.linkedMaterialIds,
       diagramIds: diagramIds ?? this.diagramIds,

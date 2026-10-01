@@ -415,6 +415,21 @@ class _FlashcardStudyPageState extends State<FlashcardStudyPage> {
             ],
           ),
         );
+      case StudyMaterialType.diagram:
+        if (!mounted) return;
+        await showDialog<void>(
+          context: context,
+          builder: (_) => AlertDialog(
+            title: Text(material.title),
+            content: Text(material.subtitle),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Fechar'),
+              ),
+            ],
+          ),
+        );
     }
   }
 
@@ -423,6 +438,7 @@ class _FlashcardStudyPageState extends State<FlashcardStudyPage> {
       StudyMaterialType.flashcard => Icons.style_outlined,
       StudyMaterialType.question => Icons.quiz_outlined,
       StudyMaterialType.document => Icons.description_outlined,
+      StudyMaterialType.diagram => Icons.account_tree_outlined,
     };
   }
 }
