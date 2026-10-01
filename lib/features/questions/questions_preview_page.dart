@@ -16,6 +16,7 @@ import 'question_filters.dart';
 import 'question_list_item.dart';
 import 'question_bulk_form_dialog.dart';
 import 'pdf_question_import_dialog.dart';
+import '../quizzes/quiz_pdf_export_service.dart';
 
 class QuestionsPreviewPage extends StatefulWidget {
   final QuestionRepository? repository;
@@ -39,9 +40,14 @@ class _QuestionsPreviewPageState extends State<QuestionsPreviewPage> {
   late final QuizExamRepository _examRepository;
   late Future<List<Question>> _questionsFuture;
   late Future<List<QuizExam>> _examsFuture;
+  List<QuizExam> _exams = const [];
   String _search = '';
   String? _selectedContest;
   String? _selectedRole;
+  String? _selectedExamId;
+  String? _selectedBoard;
+  int? _selectedYear;
+  String? _selectedVersion;
   bool _selectionMode = false;
   final Set<String> _selectedQuestionIds = {};
 
@@ -138,17 +144,52 @@ class _QuestionsPreviewPageState extends State<QuestionsPreviewPage> {
                 (question) => question.contest,
               );
               final roles = _optionsFor(questions, (question) => question.role);
+              final examIds = _exams
+                  .where(
+                    (exam) =>
+                        questions.any((question) => question.examId == exam.id),
+                  )
+                  .map((exam) => exam.id)
+                  .toList(growable: false);
+              final boards = _optionsForExams(_exams, (exam) => exam.board);
+              final years =
+                  _exams
+                      .map((exam) => exam.year)
+                      .whereType<int>()
+                      .toSet()
+                      .toList()
+                    ..sort((a, b) => b.compareTo(a));
+              final versions = _optionsForExams(
+                _exams,
+                (exam) => exam.proofVersion,
+              );
               final activeContest = contests.contains(_selectedContest)
                   ? _selectedContest
                   : null;
               final activeRole = roles.contains(_selectedRole)
                   ? _selectedRole
                   : null;
+              final activeExamId = examIds.contains(_selectedExamId)
+                  ? _selectedExamId
+                  : null;
+              final activeBoard = boards.contains(_selectedBoard)
+                  ? _selectedBoard
+                  : null;
+              final activeYear = years.contains(_selectedYear)
+                  ? _selectedYear
+                  : null;
+              final activeVersion = versions.contains(_selectedVersion)
+                  ? _selectedVersion
+                  : null;
               final visibleQuestions = QuestionFilters(
                 search: _search,
                 contest: activeContest,
                 role: activeRole,
-              ).apply(questions);
+                examId: activeExamId,
+                board: activeBoard,
+                year: activeYear,
+                proofVersion: activeVersion,
+              ).apply(questions, exams: _exams);
               return Column(
                 children: [
                   TextField(
@@ -208,6 +249,106 @@ class _QuestionsPreviewPageState extends State<QuestionsPreviewPage> {
                     ],
                   ),
                   const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: [
+                      SizedBox(
+                        width: 260,
+                        child: DropdownButtonFormField<String?>(
+                          initialValue: activeExamId,
+                          decoration: const InputDecoration(
+                            labelText: 'Prova/vaga',
+                          ),
+                          items: [
+                            const DropdownMenuItem<String?>(
+                              value: null,
+                              child: Text('Todas'),
+                            ),
+                            ..._exams
+                                .where((exam) => examIds.contains(exam.id))
+                                .map(
+                                  (exam) => DropdownMenuItem<String?>(
+                                    value: exam.id,
+                                    child: Text(
+                                      '${exam.title} · ${exam.vacancy}',
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ),
+                          ],
+                          onChanged: (value) =>
+                              setState(() => _selectedExamId = value),
+                        ),
+                      ),
+                      SizedBox(
+                        width: 180,
+                        child: DropdownButtonFormField<String?>(
+                          initialValue: activeBoard,
+                          decoration: const InputDecoration(labelText: 'Banca'),
+                          items: [
+                            const DropdownMenuItem<String?>(
+                              value: null,
+                              child: Text('Todas'),
+                            ),
+                            ...boards.map(
+                              (value) => DropdownMenuItem<String?>(
+                                value: value,
+                                child: Text(value),
+                              ),
+                            ),
+                          ],
+                          onChanged: (value) =>
+                              setState(() => _selectedBoard = value),
+                        ),
+                      ),
+                      SizedBox(
+                        width: 140,
+                        child: DropdownButtonFormField<int?>(
+                          initialValue: activeYear,
+                          decoration: const InputDecoration(labelText: 'Ano'),
+                          items: [
+                            const DropdownMenuItem<int?>(
+                              value: null,
+                              child: Text('Todos'),
+                            ),
+                            ...years.map(
+                              (value) => DropdownMenuItem<int?>(
+                                value: value,
+                                child: Text('$value'),
+                              ),
+                            ),
+                          ],
+                          onChanged: (value) =>
+                              setState(() => _selectedYear = value),
+                        ),
+                      ),
+                      SizedBox(
+                        width: 180,
+                        child: DropdownButtonFormField<String?>(
+                          initialValue: activeVersion,
+                          decoration: const InputDecoration(
+                            labelText: 'Versão',
+                          ),
+                          items: [
+                            const DropdownMenuItem<String?>(
+                              value: null,
+                              child: Text('Todas'),
+                            ),
+                            ...versions.map(
+                              (value) => DropdownMenuItem<String?>(
+                                value: value,
+                                child: Text(value),
+                              ),
+                            ),
+                          ],
+                          onChanged: (value) =>
+                              setState(() => _selectedVersion = value),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
                   Align(
                     alignment: Alignment.centerLeft,
                     child: Text(
@@ -216,6 +357,16 @@ class _QuestionsPreviewPageState extends State<QuestionsPreviewPage> {
                     ),
                   ),
                   const SizedBox(height: 10),
+                  if (visibleQuestions.isNotEmpty)
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: OutlinedButton.icon(
+                        onPressed: () => _exportExam(visibleQuestions),
+                        icon: const Icon(Icons.picture_as_pdf_outlined),
+                        label: const Text('Exportar prova filtrada'),
+                      ),
+                    ),
+                  if (visibleQuestions.isNotEmpty) const SizedBox(height: 10),
                   if (_selectionMode && _selectedQuestionIds.isNotEmpty) ...[
                     SizedBox(
                       width: double.infinity,
@@ -269,6 +420,9 @@ class _QuestionsPreviewPageState extends State<QuestionsPreviewPage> {
   void _reload() {
     _questionsFuture = _repository.getAll();
     _examsFuture = _examRepository.getAll();
+    _examsFuture.then((exams) {
+      if (mounted) setState(() => _exams = exams);
+    });
   }
 
   List<String> _optionsFor(
@@ -277,6 +431,19 @@ class _QuestionsPreviewPageState extends State<QuestionsPreviewPage> {
   ) {
     return questions
         .map(valueOf)
+        .where((value) => value.trim().isNotEmpty)
+        .toSet()
+        .toList()
+      ..sort();
+  }
+
+  List<String> _optionsForExams(
+    Iterable<QuizExam> exams,
+    String? Function(QuizExam) valueOf,
+  ) {
+    return exams
+        .map(valueOf)
+        .whereType<String>()
         .where((value) => value.trim().isNotEmpty)
         .toSet()
         .toList()
@@ -356,6 +523,40 @@ class _QuestionsPreviewPageState extends State<QuestionsPreviewPage> {
         _selectionMode = false;
         _selectedQuestionIds.clear();
       });
+    }
+  }
+
+  Future<void> _exportExam(Iterable<Question> questions) async {
+    try {
+      const service = QuizPdfExportService();
+      final bytes = await service.exportExam(
+        title: 'Dunots — Prova exportada',
+        questions: questions,
+        includeAnswerKey: true,
+        includeExplanations: true,
+        includeNotes: true,
+      );
+      final uri = await service.savePdf(
+        bytes,
+        fileName: 'dunots-prova-${DateTime.now().millisecondsSinceEpoch}.pdf',
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              uri == null
+                  ? 'Exportação cancelada.'
+                  : 'Prova exportada para ${uri.toString()}',
+            ),
+          ),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Não foi possível exportar a prova: $error')),
+        );
+      }
     }
   }
 

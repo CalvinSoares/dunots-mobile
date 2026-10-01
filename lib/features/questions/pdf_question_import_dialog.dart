@@ -352,10 +352,7 @@ class _PdfQuestionImportDialogState extends State<PdfQuestionImportDialog> {
       final correctIndex = parsed.alternatives.indexWhere(
         (alternative) => alternative.label == answer,
       );
-      final shouldAttachPage = RegExp(
-        r'figura|imagem|diagrama|tabela|gráfico|grafico|código|codigo',
-        caseSensitive: false,
-      ).hasMatch(parsed.statement);
+      final shouldAttachPage = questionNeedsVisualSnapshot(parsed);
       final image = shouldAttachPage && parsed.sourcePage != null
           ? await widget.service.renderPage(proofBytes!, parsed.sourcePage!)
           : null;

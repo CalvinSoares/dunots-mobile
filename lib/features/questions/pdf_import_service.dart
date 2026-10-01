@@ -165,7 +165,7 @@ class DefaultPdfImportService implements PdfImportService {
 }
 
 List<PdfExtractedLine> _orderPage(List<PdfExtractedLine> lines) {
-  if (lines.length < 10) {
+  if (lines.length < 8) {
     return [...lines]..sort(_compareReadingOrder);
   }
   final sortedByX = [...lines]
@@ -173,18 +173,16 @@ List<PdfExtractedLine> _orderPage(List<PdfExtractedLine> lines) {
   var bestGap = 0.0;
   var splitX = 0.0;
   for (var index = 1; index < sortedByX.length; index++) {
-    final gap =
-        sortedByX[index].bounds.left - sortedByX[index - 1].bounds.right;
+    final gap = sortedByX[index].bounds.left - sortedByX[index - 1].bounds.left;
     if (gap > bestGap) {
       bestGap = gap;
       splitX =
-          (sortedByX[index].bounds.left + sortedByX[index - 1].bounds.right) /
-          2;
+          (sortedByX[index].bounds.left + sortedByX[index - 1].bounds.left) / 2;
     }
   }
   final left = lines.where((line) => line.bounds.center.dx < splitX).toList();
   final right = lines.where((line) => line.bounds.center.dx >= splitX).toList();
-  if (bestGap < 70 || left.length < 6 || right.length < 6) {
+  if (bestGap < 90 || left.length < 4 || right.length < 4) {
     return [...lines]..sort(_compareReadingOrder);
   }
   left.sort(_compareReadingOrder);
@@ -224,13 +222,14 @@ List<PdfExtractedLine> _removeChrome(
   Set<String> repeatedChrome,
 ) {
   if (lines.isEmpty) return lines;
+  final top = lines.map((line) => line.bounds.top).reduce(math.min);
   final bottom = lines.map((line) => line.bounds.bottom).reduce(math.max);
   return lines.where((line) {
     final key = _lineKey(line.text);
     if (repeatedChrome.contains(key)) return false;
     if (_looksLikeChrome(line.text)) return false;
     if (RegExp(r'^\d{1,3}$').hasMatch(line.text.trim()) &&
-        line.bounds.bottom >= bottom - 45) {
+        (line.bounds.bottom >= bottom - 45 || line.bounds.top <= top + 35)) {
       return false;
     }
     return true;
@@ -270,11 +269,38 @@ String _normalizeGlyphs(String value) {
 }
 
 String? detectPdfProofVersion(String value) {
-  final match = RegExp(
-    r'(?:PROVA|VERS(?:ÃO|AO)|CADERNO)\s*(?:N[ºO.]?\s*)?([0-9A-Z]+)',
+  final match = _proofVersionPattern.firstMatch(value);
+  final version = match?.group(1)?.trim();
+  if (version == null || version.isEmpty) return null;
+  return version;
+}
+
+/// Expõe a ordenação para testes e para futuras telas de diagnóstico do
+/// importador. A ordem é por coluna, de cima para baixo, quando o PDF possui
+/// duas colunas; em páginas comuns continua sendo a ordem vertical normal.
+List<PdfExtractedLine> orderPdfLinesForReading(
+  Iterable<PdfExtractedLine> lines,
+) => _orderPage(lines.toList(growable: false));
+
+List<PdfExtractedLine> removePdfChromeForImport(
+  Iterable<PdfExtractedLine> lines, {
+  Set<String> repeatedChrome = const <String>{},
+}) => _removeChrome(lines.toList(growable: false), repeatedChrome);
+
+/// Indica quando vale preservar uma imagem da página junto da questão. Isso
+/// cobre diagramas, tabelas e blocos de código que o extrator textual pode
+/// representar apenas parcialmente.
+bool questionNeedsVisualSnapshot(BulkParsedQuestion question) {
+  final content = [
+    question.statement,
+    ...question.alternatives.map((alternative) => alternative.text),
+  ].join('\n');
+  return RegExp(
+    r'figura|imagem|diagrama|tabela|gráfico|grafico|código|codigo|'
+    r'\b(?:SELECT|FROM|JOIN|CREATE\s+TABLE|PUBLIC\s+CLASS|SYSTEM\.OUT)\b|'
+    r'[│┌┐└┘├┤┬┴┼↔→←]',
     caseSensitive: false,
-  ).firstMatch(value);
-  return match?.group(1)?.trim();
+  ).hasMatch(content);
 }
 
 List<PdfAnswerKeyVariant> parsePdfAnswerKey(String value) {
@@ -292,24 +318,20 @@ List<PdfAnswerKeyVariant> parsePdfAnswerKey(String value) {
   for (final rawLine in lines) {
     final line = _normalizeGlyphs(rawLine).trim();
     if (line.isEmpty) continue;
-    final version = detectPdfProofVersion(line);
-    if (version != null) {
-      currentVersion = version;
+    final versionMatch = _proofVersionPattern.firstMatch(line);
+    if (versionMatch != null) {
+      currentVersion = versionMatch.group(1)!.trim();
       ensureVariant(currentVersion);
       // O título pode conter "6 - Administração" e parecer a resposta
-      // "6-A" para a expressão regular. As respostas desse bloco serão lidas
-      // nas linhas seguintes, evitando esse falso positivo.
+      // "6-A" para a expressão regular. Se a mesma linha também trouxer
+      // respostas, somente o trecho após o título é analisado.
+      _readAnswerPairs(
+        line.substring(versionMatch.end),
+        variants[currentVersion]!,
+      );
       continue;
     }
-    final pairPattern = RegExp(
-      r'(\d{1,4})\s*(?:[-–—.:)]|\s)\s*([A-E])\b',
-      caseSensitive: false,
-    );
-    for (final match in pairPattern.allMatches(line)) {
-      variants[currentVersion]![int.parse(match.group(1)!)] = match
-          .group(2)!
-          .toUpperCase();
-    }
+    _readAnswerPairs(line, variants[currentVersion]!);
   }
   variants.removeWhere((version, answers) => answers.isEmpty);
   final result = variants.entries
@@ -326,6 +348,23 @@ List<PdfAnswerKeyVariant> parsePdfAnswerKey(String value) {
     return a.version!.compareTo(b.version!);
   });
   return List.unmodifiable(result);
+}
+
+final _proofVersionPattern = RegExp(
+  r'(?:PROVA|VERS(?:ÃO|AO)|CADERNO(?:\s+DE\s+PROVA)?)\s*'
+  r'(?:N[ºO.]?\s*)?(?:[-–—:#.]\s*)?([0-9A-Z]+)',
+  caseSensitive: false,
+);
+
+final _answerPairPattern = RegExp(
+  r'(\d{1,4})\s*(?:[-–—.:)]|\s)\s*([A-E])\b',
+  caseSensitive: false,
+);
+
+void _readAnswerPairs(String value, Map<int, String> answers) {
+  for (final match in _answerPairPattern.allMatches(value)) {
+    answers[int.parse(match.group(1)!)] = match.group(2)!.toUpperCase();
+  }
 }
 
 BulkQuestionParseResult parsePdfQuestions(PdfExtractionResult extraction) {
