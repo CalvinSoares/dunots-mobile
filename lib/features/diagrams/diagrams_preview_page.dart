@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../../shared/widgets/study_widgets.dart';
 import 'data/diagram_repository.dart';
+import 'diagram_painter.dart';
 import 'domain/study_diagram.dart';
+import 'diagram_editor_page.dart';
 
 class DiagramsPreviewPage extends StatefulWidget {
   final DiagramRepository? repository;
@@ -98,6 +100,12 @@ class _DiagramsPreviewPageState extends State<DiagramsPreviewPage> {
                     icon: const Icon(Icons.add),
                     label: const Text('Novo'),
                   ),
+                  const SizedBox(width: 8),
+                  OutlinedButton.icon(
+                    onPressed: () => _edit(selected),
+                    icon: const Icon(Icons.edit_outlined),
+                    label: const Text('Editar'),
+                  ),
                 ],
               ),
               const SizedBox(height: 16),
@@ -147,6 +155,21 @@ class _DiagramsPreviewPageState extends State<DiagramsPreviewPage> {
       });
     }
   }
+
+  Future<void> _edit(StudyDiagram diagram) async {
+    final saved = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) =>
+            DiagramEditorPage(diagram: diagram, repository: _repository),
+      ),
+    );
+    if (saved == true && mounted) {
+      setState(() {
+        _selected = null;
+        _reload();
+      });
+    }
+  }
 }
 
 class _DiagramCanvas extends StatelessWidget {
@@ -170,7 +193,7 @@ class _DiagramCanvas extends StatelessWidget {
         maxScale: 2.5,
         child: CustomPaint(
           size: const Size(620, 320),
-          painter: _DiagramPainter(
+          painter: StudyDiagramPainter(
             diagram: diagram,
             color: Theme.of(context).colorScheme,
           ),
@@ -178,61 +201,6 @@ class _DiagramCanvas extends StatelessWidget {
       ),
     );
   }
-}
-
-class _DiagramPainter extends CustomPainter {
-  final StudyDiagram diagram;
-  final ColorScheme color;
-
-  const _DiagramPainter({required this.diagram, required this.color});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final positions = <String, Offset>{};
-    for (var index = 0; index < diagram.nodes.length; index++) {
-      final node = diagram.nodes[index];
-      final id = node['id']?.toString() ?? 'node-$index';
-      positions[id] = Offset(
-        (node['x'] as num?)?.toDouble() ?? 60 + (index % 3) * 190,
-        (node['y'] as num?)?.toDouble() ?? 60 + (index ~/ 3) * 110,
-      );
-    }
-    final edgePaint = Paint()
-      ..color = color.primary.withValues(alpha: 0.65)
-      ..strokeWidth = 2;
-    for (final edge in diagram.edges) {
-      final from = positions[edge['source']?.toString()];
-      final to = positions[edge['target']?.toString()];
-      if (from != null && to != null) {
-        canvas.drawLine(from, to, edgePaint);
-      }
-    }
-    final nodePaint = Paint()..color = color.primaryContainer;
-    for (var index = 0; index < diagram.nodes.length; index++) {
-      final node = diagram.nodes[index];
-      final id = node['id']?.toString() ?? 'node-$index';
-      final center = positions[id]!;
-      final rect = RRect.fromRectAndRadius(
-        Rect.fromCenter(center: center, width: 150, height: 58),
-        const Radius.circular(12),
-      );
-      canvas.drawRRect(rect, nodePaint);
-      final text = TextPainter(
-        text: TextSpan(
-          text: node['label']?.toString() ?? id,
-          style: TextStyle(color: color.onPrimaryContainer, fontSize: 14),
-        ),
-        textDirection: TextDirection.ltr,
-        maxLines: 2,
-        ellipsis: '…',
-      )..layout(maxWidth: 130);
-      text.paint(canvas, center - Offset(text.width / 2, text.height / 2));
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _DiagramPainter oldDelegate) =>
-      oldDelegate.diagram != diagram;
 }
 
 class _DiagramFormData {
