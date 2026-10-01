@@ -69,6 +69,7 @@ void main() {
     expect(find.text('Simulado real'), findsOneWidget);
     expect(find.text('Trilha real'), findsOneWidget);
     expect(find.text('2/4 itens concluídos'), findsOneWidget);
+    expect(find.text('Iniciar estudo misto'), findsOneWidget);
 
     await tester.scrollUntilVisible(find.text('Abrir flashcards'), 300);
     await tester.tap(find.text('Abrir flashcards'));
