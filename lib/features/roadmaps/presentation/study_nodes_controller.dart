@@ -86,6 +86,8 @@ class StudyNodesController extends ChangeNotifier {
       sortOrder: state.nodes.length,
       notes: notes.trim(),
       priority: priority,
+      createdAt: DateTime.now().toUtc(),
+      updatedAt: DateTime.now().toUtc(),
     );
 
     await repository.create(node);
@@ -112,6 +114,7 @@ class StudyNodesController extends ChangeNotifier {
         description: description.trim(),
         notes: notes.trim(),
         priority: priority,
+        updatedAt: DateTime.now().toUtc(),
       ),
     );
     await load();
@@ -124,8 +127,17 @@ class StudyNodesController extends ChangeNotifier {
 
   Future<void> toggleCompletion(String id) async {
     final current = state.nodes.firstWhere((node) => node.id == id);
+    await setCompletion(id, !current.isCompleted);
+  }
+
+  Future<void> setCompletion(String id, bool isCompleted) async {
+    final current = state.nodes.firstWhere((node) => node.id == id);
+    if (current.isCompleted == isCompleted) return;
     await repository.update(
-      current.copyWith(isCompleted: !current.isCompleted),
+      current.copyWith(
+        isCompleted: isCompleted,
+        updatedAt: DateTime.now().toUtc(),
+      ),
     );
     await load();
   }
@@ -149,8 +161,13 @@ class StudyNodesController extends ChangeNotifier {
     }
 
     final target = siblings[targetIndex];
-    await repository.update(current.copyWith(sortOrder: target.sortOrder));
-    await repository.update(target.copyWith(sortOrder: current.sortOrder));
+    final now = DateTime.now().toUtc();
+    await repository.update(
+      current.copyWith(sortOrder: target.sortOrder, updatedAt: now),
+    );
+    await repository.update(
+      target.copyWith(sortOrder: current.sortOrder, updatedAt: now),
+    );
     await load();
   }
 }

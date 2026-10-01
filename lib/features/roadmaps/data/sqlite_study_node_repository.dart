@@ -46,6 +46,7 @@ class SqliteStudyNodeRepository implements StudyNodeRepository {
   }
 
   Map<String, Object?> _toRow(StudyNode node) {
+    final now = DateTime.now().toUtc();
     return {
       'id': node.id,
       'track_id': node.trackId,
@@ -56,6 +57,8 @@ class SqliteStudyNodeRepository implements StudyNodeRepository {
       'is_completed': node.isCompleted ? 1 : 0,
       'notes': node.notes,
       'priority': node.priority.index,
+      'created_at': (node.createdAt ?? now).toIso8601String(),
+      'updated_at': (node.updatedAt ?? now).toIso8601String(),
     };
   }
 
@@ -70,6 +73,8 @@ class SqliteStudyNodeRepository implements StudyNodeRepository {
       isCompleted: row['is_completed'] == 1,
       notes: row['notes']! as String,
       priority: _priorityFromValue(row['priority']! as int),
+      createdAt: DateTime.tryParse(row['created_at']?.toString() ?? ''),
+      updatedAt: DateTime.tryParse(row['updated_at']?.toString() ?? ''),
     );
   }
 

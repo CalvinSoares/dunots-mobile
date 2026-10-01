@@ -41,12 +41,15 @@ class SqliteStudyTrackRepository implements StudyTrackRepository {
   }
 
   Map<String, Object?> _toRow(StudyTrack track) {
+    final now = DateTime.now().toUtc();
     return {
       'id': track.id,
       'title': track.title,
       'description': track.description,
       'completed_items': track.completedItems,
       'total_items': track.totalItems,
+      'created_at': (track.createdAt ?? now).toIso8601String(),
+      'updated_at': (track.updatedAt ?? now).toIso8601String(),
     };
   }
 
@@ -57,6 +60,8 @@ class SqliteStudyTrackRepository implements StudyTrackRepository {
       description: row['description']! as String,
       completedItems: row['completed_items']! as int,
       totalItems: row['total_items']! as int,
+      createdAt: DateTime.tryParse(row['created_at']?.toString() ?? ''),
+      updatedAt: DateTime.tryParse(row['updated_at']?.toString() ?? ''),
     );
   }
 }

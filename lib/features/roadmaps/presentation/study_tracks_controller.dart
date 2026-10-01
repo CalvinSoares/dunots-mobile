@@ -81,6 +81,8 @@ class StudyTracksController extends ChangeNotifier {
       description: description.trim(),
       completedItems: 0,
       totalItems: 0,
+      createdAt: DateTime.now().toUtc(),
+      updatedAt: DateTime.now().toUtc(),
     );
 
     await repository.create(track);
@@ -99,7 +101,11 @@ class StudyTracksController extends ChangeNotifier {
     }
 
     await repository.update(
-      track.copyWith(title: normalizedTitle, description: description.trim()),
+      track.copyWith(
+        title: normalizedTitle,
+        description: description.trim(),
+        updatedAt: DateTime.now().toUtc(),
+      ),
     );
     await load();
   }

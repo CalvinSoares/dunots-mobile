@@ -52,6 +52,7 @@ class SqliteStudyNodeMaterialRepository implements StudyNodeMaterialRepository {
       'node_id': link.nodeId,
       'material_id': link.materialId,
       'material_type': link.materialType.name,
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
     };
   }
 
