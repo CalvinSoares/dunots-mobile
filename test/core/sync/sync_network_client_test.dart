@@ -115,4 +115,57 @@ void main() {
     expect(code.token, 'legacy-token');
     expect(code.expiresAt.isAfter(DateTime.now().toUtc()), isTrue);
   });
+
+  test('codifica e lê o convite QR no contrato compartilhado', () {
+    final code = SyncPairingCode(
+      address: Uri.parse('http://192.168.0.20:43127'),
+      token: 'pairing-qr-token',
+      expiresAt: DateTime.utc(2026, 10, 1, 12),
+    );
+
+    final decoded = SyncPairingCode.decode(code.encode());
+
+    expect(decoded.address, code.address);
+    expect(decoded.token, code.token);
+    expect(decoded.expiresAt, code.expiresAt);
+  });
+
+  test('host mobile entrega o pacote e aceita o retorno uma única vez', () async {
+    final host = SyncNetworkHost();
+    final package = SyncPackage.empty(
+      exportedAt: DateTime.utc(2026, 10, 1),
+      source: const SyncIdentity(
+        deviceId: 'mobile-test',
+        deviceName: 'Mobile',
+      ),
+    );
+    final info = await host.start(package, token: 'mobile-pairing-token');
+    final client = SyncNetworkClient();
+
+    final session = await client.receiveFromDesktop(info.pairing);
+    expect(session.package.source.deviceId, 'mobile-test');
+
+    await session.sendBack(
+      SyncPackage.empty(
+        exportedAt: DateTime.utc(2026, 10, 1),
+        source: const SyncIdentity(
+          deviceId: 'desktop-test',
+          deviceName: 'Desktop',
+        ),
+      ),
+    );
+
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    final incoming = host.takeIncoming();
+    expect(incoming, isNotNull);
+    final returned = await SyncCrypto.decryptPackage(
+      incoming!.payload,
+      incoming.secret,
+    );
+    expect(returned.source.deviceId, 'desktop-test');
+    expect(host.takeIncoming(), isNull);
+
+    client.close();
+    await host.stop();
+  });
 }
