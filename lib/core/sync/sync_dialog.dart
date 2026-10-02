@@ -1,8 +1,28 @@
+import 'dart:async';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 import 'sync_database_repository.dart';
+import 'sync_crypto.dart';
 import 'sync_network_client.dart';
+
+class SyncDialogLayout {
+  const SyncDialogLayout._();
+
+  static double horizontalInset(Size screen) =>
+      screen.width < 420 ? 12.0 : 24.0;
+
+  static double contentWidth(Size screen) =>
+      (screen.width - (horizontalInset(screen) * 2) - 32)
+          .clamp(280.0, 720.0)
+          .toDouble();
+
+  static double contentHeight(Size screen) =>
+      (screen.height * 0.62).clamp(300.0, 500.0).toDouble();
+}
 
 class SyncDialog extends StatefulWidget {
   final SyncDatabaseRepository repository;
@@ -26,6 +46,10 @@ class _SyncDialogState extends State<SyncDialog>
   List<SyncBackup> backups = const [];
   late final SyncNetworkClient networkClient;
   SyncNetworkSession? networkSession;
+  SyncNetworkHostInfo? hostInfo;
+  final networkHost = SyncNetworkHost();
+  Timer? hostPollTimer;
+  bool scannerOpen = false;
   final pairingCodeController = TextEditingController();
 
   @override
@@ -43,13 +67,24 @@ class _SyncDialogState extends State<SyncDialog>
   void dispose() {
     tabs.dispose();
     pairingCodeController.dispose();
+    hostPollTimer?.cancel();
+    networkHost.stop();
     networkClient.close();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final screen = MediaQuery.sizeOf(context);
+    final horizontalInset = SyncDialogLayout.horizontalInset(screen);
+    final contentWidth = SyncDialogLayout.contentWidth(screen);
+    final contentHeight = SyncDialogLayout.contentHeight(screen);
+
     return AlertDialog(
+      insetPadding: EdgeInsets.symmetric(
+        horizontal: horizontalInset,
+        vertical: 20,
+      ),
       title: const Row(
         children: [
           Icon(Icons.sync),
@@ -58,12 +93,19 @@ class _SyncDialogState extends State<SyncDialog>
         ],
       ),
       content: SizedBox(
-        width: 720,
+        width: contentWidth,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             TabBar(
               controller: tabs,
+              isScrollable: false,
+              labelPadding: const EdgeInsets.symmetric(horizontal: 4),
+              labelStyle: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+              unselectedLabelStyle: const TextStyle(fontSize: 12),
               tabs: const [
                 Tab(text: 'Exportar'),
                 Tab(text: 'Importar'),
@@ -73,7 +115,7 @@ class _SyncDialogState extends State<SyncDialog>
             ),
             const SizedBox(height: 16),
             SizedBox(
-              height: 410,
+              height: contentHeight,
               child: TabBarView(
                 controller: tabs,
                 children: [
@@ -217,9 +259,45 @@ class _SyncDialogState extends State<SyncDialog>
         const _SyncInfoCard(
           icon: Icons.wifi_tethering_outlined,
           title: 'Parear pela rede local',
-          detail: 'Cole o código copiado pelo Dunots Desktop. O código contém endereço, token temporário e expiração; o payload é protegido com AES-GCM.',
+          detail: 'Leia o QR Code do outro dispositivo ou cole o convite. O endereço, token e expiração seguem o mesmo padrão no desktop e no mobile.',
         ),
         const SizedBox(height: 14),
+        if (hostInfo == null)
+          FilledButton.icon(
+            onPressed: busy ? null : _startMobileHost,
+            icon: const Icon(Icons.qr_code_2),
+            label: const Text('Compartilhar este mobile'),
+          )
+        else
+          _buildMobileHostCard(),
+        const SizedBox(height: 14),
+        OutlinedButton.icon(
+          onPressed: busy
+              ? null
+              : () => setState(() => scannerOpen = !scannerOpen),
+          icon: Icon(scannerOpen ? Icons.close : Icons.qr_code_scanner),
+          label: Text(scannerOpen ? 'Fechar leitor' : 'Ler QR Code'),
+        ),
+        if (scannerOpen) ...[
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 230,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: MobileScanner(
+                onDetect: (capture) {
+                  final values = capture.barcodes
+                      .map((barcode) => barcode.rawValue)
+                      .whereType<String>()
+                      .toList(growable: false);
+                  final value = values.isEmpty ? null : values.first;
+                  if (value != null) _handlePairingQr(value);
+                },
+              ),
+            ),
+          ),
+        ],
+        const SizedBox(height: 12),
         TextField(
           controller: pairingCodeController,
           minLines: 3,
@@ -281,6 +359,42 @@ class _SyncDialogState extends State<SyncDialog>
     );
   }
 
+  Widget _buildMobileHostCard() {
+    final info = hostInfo!;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Convite deste mobile',
+              style: TextStyle(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 8),
+            Center(
+              child: QrImageView(
+                data: info.invite,
+                size: 210,
+                backgroundColor: Colors.white,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(info.address),
+            const SizedBox(height: 4),
+            Text('Expira às ${_formatDate(info.expiresAt)}'),
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: _stopMobileHost,
+              icon: const Icon(Icons.stop_circle_outlined),
+              label: const Text('Encerrar compartilhamento'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _receiveNetwork() async {
     setState(() {
       busy = true;
@@ -309,6 +423,86 @@ class _SyncDialogState extends State<SyncDialog>
         message = 'Não foi possível parear: $error';
       });
     }
+  }
+
+  void _handlePairingQr(String value) {
+    try {
+      final pairing = SyncPairingCode.decode(value);
+      pairingCodeController.text = pairing.encode();
+      setState(() {
+        scannerOpen = false;
+        message = 'Convite lido. Confirme o recebimento para iniciar o pareamento.';
+        success = true;
+      });
+    } catch (error) {
+      setState(() {
+        success = false;
+        message = 'QR Code inválido: $error';
+      });
+    }
+  }
+
+  Future<void> _startMobileHost() async {
+    setState(() {
+      busy = true;
+      message = null;
+    });
+    try {
+      final info = await networkHost.start(await widget.repository.exportPackage());
+      if (!mounted) return;
+      hostPollTimer?.cancel();
+      hostPollTimer = Timer.periodic(
+        const Duration(seconds: 2),
+        (_) => _pollMobileHostIncoming(),
+      );
+      setState(() {
+        hostInfo = info;
+        busy = false;
+        success = true;
+        message = 'Compartilhamento iniciado. Mostre o QR Code ao desktop.';
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        busy = false;
+        success = false;
+        message = 'Não foi possível iniciar o compartilhamento: $error';
+      });
+    }
+  }
+
+  Future<void> _pollMobileHostIncoming() async {
+    final incoming = networkHost.takeIncoming();
+    if (incoming == null) return;
+    try {
+      final package = await SyncCrypto.decryptPackage(
+        incoming.payload,
+        incoming.secret,
+      );
+      final result = await widget.repository.preview(package);
+      if (!mounted) return;
+      setState(() {
+        preview = result;
+        resolutions.clear();
+        defaultResolution = SyncConflictResolution.keepLocal;
+        success = true;
+        message = 'O desktop enviou os dados dele. Revise a prévia antes de aplicar.';
+      });
+      tabs.animateTo(1);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        success = false;
+        message = 'Não foi possível ler o retorno do desktop: $error';
+      });
+    }
+  }
+
+  Future<void> _stopMobileHost() async {
+    hostPollTimer?.cancel();
+    hostPollTimer = null;
+    await networkHost.stop();
+    if (mounted) setState(() => hostInfo = null);
   }
 
   Future<void> _sendNetworkBack() async {
