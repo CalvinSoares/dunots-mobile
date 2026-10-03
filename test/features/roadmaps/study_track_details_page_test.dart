@@ -10,13 +10,389 @@ import 'package:dunots_mobile/features/roadmaps/domain/study_track.dart';
 import 'package:dunots_mobile/features/roadmaps/data/study_material_progress_repository.dart';
 import 'package:dunots_mobile/core/models/flashcard.dart';
 import 'package:dunots_mobile/features/flashcards/data/flashcard_repository.dart';
-import 'package:dunots_mobile/features/challenges/data/challenge_repository.dart';
-import 'package:dunots_mobile/features/challenges/domain/challenge.dart';
 import 'package:dunots_mobile/features/roadmaps/roadmaps_preview_page.dart';
+import 'package:dunots_mobile/features/roadmaps/presentation/study_track_details_page.dart';
 import 'package:dunots_mobile/features/questions/data/question_repository.dart';
 import 'package:dunots_mobile/features/quizzes/data/quiz_attempt_repository.dart';
+import 'package:dunots_mobile/shared/widgets/dunots_modal.dart';
+
+Future<void> openNodeActions(WidgetTester tester) async {
+  if (find.byTooltip('Ações do tópico').evaluate().isEmpty) {
+    final nodeCard = find.bySemanticsLabel(RegExp(r'^Tópico ')).first;
+    await tester.tap(nodeCard);
+    await tester.pumpAndSettle();
+  }
+  await tester.tap(find.byTooltip('Ações do tópico'));
+  await tester.pumpAndSettle();
+}
+
+Future<void> openTrackActions(WidgetTester tester) async {
+  await tester.tap(find.byTooltip('Ações da trilha'));
+  await tester.pumpAndSettle();
+}
 
 void main() {
+  testWidgets('compacta o card e abre os detalhes do tópico ao tocar', (
+    tester,
+  ) async {
+    const title =
+        'Topologias de rede e arquiteturas distribuídas em ambientes corporativos';
+    const description =
+        'Descrição extensa do tópico que deve ficar resumida no card e completa na tela de detalhes.';
+    const notes = 'Anotação privada para revisar este conteúdo depois.';
+
+    final repository = InMemoryStudyNodeRepository(
+      nodes: const [
+        StudyNode(
+          id: 'node-details',
+          trackId: 'track-details',
+          parentId: null,
+          title: title,
+          description: description,
+          notes: notes,
+          sortOrder: 0,
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: StudyTrackDetailsPage(
+          track: const StudyTrack(
+            id: 'track-details',
+            title: 'Redes',
+            description: '',
+            completedItems: 0,
+            totalItems: 1,
+          ),
+          repository: repository,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text(title));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Detalhes do tópico'), findsOneWidget);
+    expect(find.byTooltip('Ações do tópico'), findsOneWidget);
+    expect(find.text(description), findsOneWidget);
+    expect(find.text(notes), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Marcar como concluído'));
+    await tester.pumpAndSettle();
+
+    expect(
+      (await repository.getForTrack('track-details')).single.isCompleted,
+      isTrue,
+    );
+  });
+
+  testWidgets(
+    'edita tópico no detalhe sem fechar a tela e preserva a rolagem da trilha',
+    (tester) async {
+      tester.view.physicalSize = const Size(360, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      final nodes = List.generate(
+        24,
+        (index) => StudyNode(
+          id: 'node-scroll-$index',
+          trackId: 'track-scroll',
+          parentId: null,
+          title: 'Tópico ${index + 1}',
+          description: 'Descrição do tópico ${index + 1}',
+          sortOrder: index,
+        ),
+      );
+      final repository = InMemoryStudyNodeRepository(nodes: nodes);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: StudyTrackDetailsPage(
+            track: const StudyTrack(
+              id: 'track-scroll',
+              title: 'Trilha longa',
+              description: '',
+              completedItems: 0,
+              totalItems: 24,
+            ),
+            repository: repository,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final nodeList = find.byKey(
+        const PageStorageKey('study-track-node-list'),
+      );
+      final nodeScrollable = find.descendant(
+        of: nodeList,
+        matching: find.byType(Scrollable),
+      );
+      await tester.scrollUntilVisible(
+        find.text('Tópico 18'),
+        240,
+        scrollable: nodeScrollable,
+      );
+      final offsetBeforeOpening = tester
+          .state<ScrollableState>(nodeScrollable)
+          .position
+          .pixels;
+      expect(offsetBeforeOpening, greaterThan(0));
+
+      await tester.tap(find.text('Tópico 18'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Ações do tópico'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Editar'));
+      await tester.pumpAndSettle();
+
+      final fields = find.descendant(
+        of: find.byType(DunotsModal),
+        matching: find.byType(TextField),
+      );
+      await tester.enterText(fields.first, 'Tópico 18 revisado');
+      await tester.tap(find.text('Salvar'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Detalhes do tópico'), findsOneWidget);
+      expect(find.text('Tópico 18 revisado'), findsOneWidget);
+
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+
+      final restoredOffset = tester
+          .state<ScrollableState>(nodeScrollable)
+          .position
+          .pixels;
+      expect(restoredOffset, closeTo(offsetBeforeOpening, 0.01));
+      expect(find.text('Tópico 18 revisado'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('recolhe e reabre grupos da árvore', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: StudyTrackDetailsPage(
+          track: const StudyTrack(
+            id: 'track-collapse',
+            title: 'Redes',
+            description: '',
+            completedItems: 0,
+            totalItems: 2,
+          ),
+          repository: InMemoryStudyNodeRepository(
+            nodes: const [
+              StudyNode(
+                id: 'node-parent-collapse',
+                trackId: 'track-collapse',
+                parentId: null,
+                title: 'Redes de computadores',
+                description: '',
+                sortOrder: 0,
+              ),
+              StudyNode(
+                id: 'node-child-collapse',
+                trackId: 'track-collapse',
+                parentId: 'node-parent-collapse',
+                title: 'Topologias de rede',
+                description: '',
+                sortOrder: 0,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Topologias de rede'), findsOneWidget);
+    await tester.tap(find.byTooltip('Recolher grupo'));
+    await tester.pumpAndSettle();
+    expect(find.text('Topologias de rede'), findsNothing);
+
+    await tester.tap(find.byTooltip('Expandir grupo'));
+    await tester.pumpAndSettle();
+    expect(find.text('Topologias de rede'), findsOneWidget);
+  });
+
+  testWidgets('permite excluir um tópico preservando seus subtópicos', (
+    tester,
+  ) async {
+    final repository = InMemoryStudyNodeRepository(
+      nodes: const [
+        StudyNode(
+          id: 'node-delete-parent',
+          trackId: 'track-delete',
+          parentId: null,
+          title: 'Grupo de redes',
+          description: '',
+          sortOrder: 0,
+        ),
+        StudyNode(
+          id: 'node-delete-child',
+          trackId: 'track-delete',
+          parentId: 'node-delete-parent',
+          title: 'Subtópico preservado',
+          description: '',
+          sortOrder: 0,
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: StudyTrackDetailsPage(
+          track: const StudyTrack(
+            id: 'track-delete',
+            title: 'Redes',
+            description: '',
+            completedItems: 0,
+            totalItems: 2,
+          ),
+          repository: repository,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Grupo de redes'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Ações do tópico'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Excluir tópico'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Excluir também 1 subtópico'), findsOneWidget);
+    expect(
+      find.text('Desmarcado: eles sobem para o mesmo nível deste tópico.'),
+      findsOneWidget,
+    );
+    await tester.tap(find.widgetWithText(FilledButton, 'Excluir'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Grupo de redes'), findsNothing);
+    expect(
+      (await repository.getForTrack('track-delete')).single.parentId,
+      isNull,
+    );
+  });
+
+  testWidgets('destaca uma folha acionável em vez do grupo pai', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: StudyTrackDetailsPage(
+          track: const StudyTrack(
+            id: 'track-next',
+            title: 'Redes',
+            description: '',
+            completedItems: 0,
+            totalItems: 2,
+          ),
+          repository: InMemoryStudyNodeRepository(
+            nodes: const [
+              StudyNode(
+                id: 'node-group',
+                trackId: 'track-next',
+                parentId: null,
+                title: 'Grupo de redes',
+                description: '',
+                sortOrder: 0,
+                priority: StudyPriority.urgent,
+              ),
+              StudyNode(
+                id: 'node-actionable',
+                trackId: 'track-next',
+                parentId: 'node-group',
+                title: 'Subtópico acionável',
+                description: '',
+                sortOrder: 0,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('→ Subtópico acionável'), findsOneWidget);
+    expect(find.text('→ Grupo de redes'), findsNothing);
+  });
+
+  testWidgets('agrupa a movimentação do tópico no menu em tela compacta', (
+    tester,
+  ) async {
+    final trackRepository = InMemoryStudyTrackRepository(
+      tracks: const [
+        StudyTrack(
+          id: 'track-compact',
+          title: 'Trilha compacta',
+          description: '',
+          completedItems: 0,
+          totalItems: 0,
+        ),
+      ],
+    );
+    final nodeRepository = InMemoryStudyNodeRepository(
+      nodes: [
+        const StudyNode(
+          id: 'node-1',
+          trackId: 'track-compact',
+          parentId: null,
+          title: 'Primeiro tópico',
+          description: '',
+          sortOrder: 0,
+        ),
+        const StudyNode(
+          id: 'node-2',
+          trackId: 'track-compact',
+          parentId: null,
+          title: 'Segundo tópico',
+          description: '',
+          sortOrder: 1,
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: const MediaQueryData(size: Size(360, 800)),
+          child: child!,
+        ),
+        home: SizedBox(
+          width: 360,
+          height: 800,
+          child: RoadmapsPreviewPage(
+            repository: trackRepository,
+            nodeRepository: nodeRepository,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Abrir trilha'));
+    await tester.pumpAndSettle();
+
+    expect(find.byTooltip('Mover para cima'), findsNothing);
+    expect(find.byTooltip('Mover para baixo'), findsNothing);
+    await tester.tap(find.text('Primeiro tópico'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Ações do tópico'));
+    await tester.pumpAndSettle();
+    expect(find.text('Mover para cima'), findsOneWidget);
+    expect(find.text('Mover para baixo'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('abre a trilha e cria tópico e subtópico', (tester) async {
     final trackRepository = InMemoryStudyTrackRepository(
       tracks: const [
@@ -48,10 +424,10 @@ void main() {
 
     expect(find.text('Nenhum tópico cadastrado ainda.'), findsOneWidget);
 
-    await tester.tap(find.text('Novo tópico'));
+    await tester.tap(find.byTooltip('Novo tópico'));
     await tester.pumpAndSettle();
     final firstDialogFields = find.descendant(
-      of: find.byType(AlertDialog),
+      of: find.byType(DunotsModal),
       matching: find.byType(TextField),
     );
     await tester.enterText(firstDialogFields.at(0), 'Arquiteturas de rede');
@@ -60,13 +436,14 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Arquiteturas de rede'), findsOneWidget);
-    await tester.ensureVisible(find.byTooltip('Adicionar subtópico'));
-    expect(find.byTooltip('Adicionar subtópico'), findsOneWidget);
-
-    await tester.tap(find.byTooltip('Adicionar subtópico'));
+    await tester.tap(find.text('Arquiteturas de rede'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Ações do tópico'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Adicionar subtópico'));
     await tester.pumpAndSettle();
     final childDialogFields = find.descendant(
-      of: find.byType(AlertDialog),
+      of: find.byType(DunotsModal),
       matching: find.byType(TextField),
     );
     await tester.enterText(childDialogFields.at(0), 'Topologia em estrela');
@@ -82,23 +459,29 @@ void main() {
       scrollable: find.byType(Scrollable).last,
     );
     expect(find.text('Topologia em estrela'), findsOneWidget);
-    expect(find.text('0/2 itens concluídos'), findsOneWidget);
+    expect(find.text('0 de 2 itens'), findsOneWidget);
+    expect(find.text('0%'), findsOneWidget);
+    expect(find.text('A fazer'), findsNWidgets(2));
+    expect(find.text('Próximo tópico'), findsOneWidget);
 
-    await tester.ensureVisible(find.byType(Checkbox).first);
-    await tester.tap(find.byType(Checkbox).first);
+    final completionToggle = find.bySemanticsLabel(
+      'Concluir tópico Arquiteturas de rede',
+    );
+    await tester.ensureVisible(completionToggle);
+    await tester.tap(completionToggle);
     await tester.pumpAndSettle();
 
-    expect(find.text('1/2 itens concluídos'), findsOneWidget);
+    expect(find.text('1 de 2 itens'), findsOneWidget);
     final updatedTrack = (await trackRepository.getAll()).single;
     expect(updatedTrack.completedItems, 1);
     expect(updatedTrack.totalItems, 2);
 
-    await tester.ensureVisible(find.byTooltip('Vincular material').first);
-    await tester.tap(find.byTooltip('Vincular material').first);
+    await openNodeActions(tester);
+    await tester.tap(find.text('Vincular material'));
     await tester.pumpAndSettle();
 
     final materialDialogSearch = find.descendant(
-      of: find.byType(AlertDialog),
+      of: find.byType(DunotsModal),
       matching: find.byType(TextField),
     );
     await tester.enterText(materialDialogSearch, 'independência');
@@ -115,10 +498,11 @@ void main() {
 
     await tester.dragFrom(const Offset(300, 520), const Offset(0, -260));
     await tester.pumpAndSettle();
-    await tester.tap(find.byIcon(Icons.edit_outlined).last);
+    await openNodeActions(tester);
+    await tester.tap(find.text('Editar'));
     await tester.pumpAndSettle();
     final editDialogFields = find.descendant(
-      of: find.byType(AlertDialog),
+      of: find.byType(DunotsModal),
       matching: find.byType(TextField),
     );
     await tester.enterText(
@@ -186,13 +570,14 @@ void main() {
 
     await tester.tap(find.byTooltip('Abrir trilha'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Montar simulado com questões vinculadas'));
+    await openNodeActions(tester);
+    await tester.tap(find.textContaining('Montar simulado'));
     await tester.pumpAndSettle();
     expect(find.text('Revisar seleção'), findsOneWidget);
     await tester.tap(find.text('Continuar (1)'));
     await tester.pumpAndSettle();
     final quizDialogField = find.descendant(
-      of: find.byType(AlertDialog),
+      of: find.byType(DunotsModal),
       matching: find.byType(TextField),
     );
     await tester.enterText(quizDialogField, 'Simulado da trilha');
@@ -203,89 +588,6 @@ void main() {
     expect((await attemptRepository.getAll()).single.questionIds, [
       'question-001',
     ]);
-  });
-
-  testWidgets('vincula e inicia desafios diretamente pelo tópico', (
-    tester,
-  ) async {
-    final now = DateTime(2026, 10, 1);
-    final trackRepository = InMemoryStudyTrackRepository(
-      tracks: const [
-        StudyTrack(
-          id: 'track-challenge',
-          title: 'Algoritmos',
-          description: '',
-          completedItems: 0,
-          totalItems: 1,
-        ),
-      ],
-    );
-    final nodeRepository = InMemoryStudyNodeRepository(
-      nodes: const [
-        StudyNode(
-          id: 'node-challenge',
-          trackId: 'track-challenge',
-          parentId: null,
-          title: 'Two Sum',
-          description: '',
-          sortOrder: 0,
-        ),
-      ],
-    );
-    final linkRepository = InMemoryStudyNodeMaterialRepository();
-    final challengeRepository = InMemoryChallengeRepository(
-      items: [
-        Challenge(
-          id: 'challenge-linked',
-          title: 'Two Sum · Hash Map',
-          solution: 'Use um mapa de complementos.',
-          createdAt: now,
-        ),
-      ],
-    );
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: RoadmapsPreviewPage(
-          repository: trackRepository,
-          nodeRepository: nodeRepository,
-          materialLinkRepository: linkRepository,
-          challengeRepository: challengeRepository,
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byTooltip('Abrir trilha'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Vincular material'));
-    await tester.pumpAndSettle();
-    await tester.enterText(
-      find.descendant(
-        of: find.byType(AlertDialog),
-        matching: find.byType(TextField),
-      ),
-      'Hash Map',
-    );
-    await tester.pump();
-    expect(find.text('Two Sum · Hash Map'), findsOneWidget);
-    await tester.tap(find.text('Two Sum · Hash Map'));
-    await tester.tap(find.text('Salvar vínculos'));
-    await tester.pumpAndSettle();
-
-    expect(
-      (await linkRepository.getForNode('node-challenge')).single.materialType,
-      StudyMaterialType.challenge,
-    );
-    expect(find.byTooltip('Estudar desafios vinculados'), findsOneWidget);
-    await tester.tap(find.byTooltip('Estudar desafios vinculados'));
-    await tester.pumpAndSettle();
-    expect(find.text('Two Sum · Hash Map'), findsOneWidget);
-    await tester.tap(find.text('Mostrar solução'));
-    await tester.pump();
-    await tester.tap(find.text('fácil'));
-    await tester.pumpAndSettle();
-    expect(find.text('Sessão concluída'), findsNWidgets(2));
   });
 
   testWidgets('seleciona questões manualmente em vários tópicos', (
@@ -354,7 +656,8 @@ void main() {
 
     await tester.tap(find.byTooltip('Abrir trilha'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Selecionar questões da trilha'));
+    await openTrackActions(tester);
+    await tester.tap(find.text('Selecionar questões'));
     await tester.pumpAndSettle();
 
     expect(find.text('Selecionar questões'), findsOneWidget);
@@ -374,7 +677,7 @@ void main() {
     await tester.pumpAndSettle();
 
     final quizDialogField = find.descendant(
-      of: find.byType(AlertDialog),
+      of: find.byType(DunotsModal),
       matching: find.byType(TextField),
     );
     await tester.enterText(quizDialogField, 'Revisão manual da trilha');
@@ -437,7 +740,8 @@ void main() {
 
     await tester.tap(find.byTooltip('Abrir trilha'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Montar simulado por tópicos'));
+    await openTrackActions(tester);
+    await tester.tap(find.text('Montar simulado'));
     await tester.pumpAndSettle();
 
     expect(find.text('Selecionar tópicos'), findsOneWidget);
@@ -457,7 +761,7 @@ void main() {
     await tester.pumpAndSettle();
 
     final quizDialogField = find.descendant(
-      of: find.byType(AlertDialog),
+      of: find.byType(DunotsModal),
       matching: find.byType(TextField),
     );
     await tester.enterText(quizDialogField, 'Simulado por tópico');
@@ -532,14 +836,15 @@ void main() {
       await tester.tap(find.byTooltip('Abrir trilha'));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byTooltip('Abrir material vinculado'));
+      await openNodeActions(tester);
+      await tester.tap(find.textContaining('Abrir materiais'));
       await tester.pumpAndSettle();
       expect(find.text('Detalhes do flashcard'), findsOneWidget);
       await tester.tap(find.text('Marcar como estudado'));
       await tester.pumpAndSettle();
 
-      expect(find.text('1/1 materiais estudados'), findsOneWidget);
-      expect(find.text('1/1 itens concluídos'), findsOneWidget);
+      expect(find.text('1/1'), findsOneWidget);
+      expect(find.text('1 de 1 item'), findsOneWidget);
       expect(
         await progressRepository.isCompleted(
           const StudyMaterialLink(

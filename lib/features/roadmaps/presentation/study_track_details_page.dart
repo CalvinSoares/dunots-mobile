@@ -1,14 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
+import '../../../app/dunots_theme.dart';
+
 import '../../questions/data/question_repository.dart';
 import '../../questions/domain/question.dart';
 import '../../questions/question_details_page.dart';
 import '../../flashcards/data/flashcard_repository.dart';
 import '../../flashcards/flashcard_details_page.dart';
-import '../../challenges/data/challenge_repository.dart';
-import '../../challenges/challenge_details_page.dart';
-import '../../challenges/challenge_study_session_page.dart';
 import '../../quizzes/data/quiz_attempt_repository.dart';
 import '../../quizzes/domain/quiz_attempt.dart';
 import '../../quizzes/quiz_attempt_page.dart';
@@ -21,12 +20,11 @@ import '../domain/study_material.dart';
 import '../data/study_document_repository.dart';
 import '../data/study_material_progress_repository.dart';
 import 'study_document_viewer_page.dart';
+import 'study_node_details_page.dart';
 import '../domain/study_track.dart';
-import '../../diagrams/data/diagram_repository.dart';
-import '../../diagrams/diagram_viewer_page.dart';
-import '../../diagrams/domain/study_diagram.dart';
 import 'study_node_filters.dart';
 import 'study_nodes_controller.dart';
+import '../../../shared/widgets/dunots_modal.dart';
 
 class StudyTrackDetailsPage extends StatefulWidget {
   final StudyTrack track;
@@ -36,11 +34,9 @@ class StudyTrackDetailsPage extends StatefulWidget {
   final StudyNodeMaterialRepository? materialLinkRepository;
   final QuestionRepository? questionRepository;
   final FlashcardRepository? flashcardRepository;
-  final ChallengeRepository? challengeRepository;
   final StudyDocumentRepository? documentRepository;
   final StudyMaterialProgressRepository? materialProgressRepository;
   final QuizAttemptRepository? attemptRepository;
-  final DiagramRepository? diagramRepository;
 
   const StudyTrackDetailsPage({
     super.key,
@@ -51,11 +47,9 @@ class StudyTrackDetailsPage extends StatefulWidget {
     this.materialLinkRepository,
     this.questionRepository,
     this.flashcardRepository,
-    this.challengeRepository,
     this.documentRepository,
     this.materialProgressRepository,
     this.attemptRepository,
-    this.diagramRepository,
   });
 
   @override
@@ -68,10 +62,11 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
   late final StudyNodeMaterialRepository _materialLinkRepository;
   late final QuestionRepository _questionRepository;
   late final QuizAttemptRepository _attemptRepository;
-  late final DiagramRepository _diagramRepository;
   late final StudyMaterialProgressRepository _materialProgressRepository;
   final Map<String, List<StudyMaterialLink>> _linksByNode = {};
   final Map<String, Set<String>> _completedMaterialKeysByNode = {};
+  final Set<String> _collapsedNodeIds = <String>{};
+  final ScrollController _nodeListController = ScrollController();
   String _searchQuery = '';
   StudyPriority? _priorityFilter;
   StudyNodeCompletionFilter _completionFilter = StudyNodeCompletionFilter.all;
@@ -91,8 +86,6 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
         widget.questionRepository ?? InMemoryQuestionRepository();
     _attemptRepository =
         widget.attemptRepository ?? InMemoryQuizAttemptRepository();
-    _diagramRepository =
-        widget.diagramRepository ?? InMemoryDiagramRepository();
     _materialProgressRepository =
         widget.materialProgressRepository ??
         InMemoryStudyMaterialProgressRepository();
@@ -101,6 +94,7 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
 
   @override
   void dispose() {
+    _nodeListController.dispose();
     _controller.dispose();
     super.dispose();
   }
@@ -111,44 +105,67 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
       animation: _controller,
       builder: (context, _) {
         return Scaffold(
-          appBar: AppBar(title: Text(widget.track.title)),
+          appBar: AppBar(
+            title: Text(widget.track.title),
+            actions: [
+              IconButton(
+                tooltip: 'Buscar e filtrar tópicos',
+                onPressed: _showNodeSearchAndFilters,
+                icon: const Icon(Icons.search),
+              ),
+              IconButton(
+                tooltip: 'Novo tópico',
+                onPressed: () => _showNodeDialog(context),
+                icon: const Icon(Icons.add),
+              ),
+              PopupMenuButton<String>(
+                tooltip: 'Ações da trilha',
+                onSelected: (value) {
+                  switch (value) {
+                    case 'questions':
+                      _showManualQuestionSelection();
+                    case 'quiz':
+                      _showTopicQuizBuilder();
+                  }
+                },
+                itemBuilder: (context) => const [
+                  PopupMenuItem(
+                    value: 'questions',
+                    child: ListTile(
+                      leading: Icon(Icons.checklist),
+                      title: Text('Selecionar questões'),
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: 'quiz',
+                    child: ListTile(
+                      leading: Icon(Icons.quiz_outlined),
+                      title: Text('Montar simulado'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
           body: SafeArea(
             child: LayoutBuilder(
               builder: (context, constraints) {
                 final compact = constraints.maxHeight < 560;
                 final header = [
-                  Text(
-                    widget.track.description,
-                    style: const TextStyle(color: Color(0xFFB6B7AD)),
-                  ),
-                  const SizedBox(height: 18),
-                  Wrap(
-                    spacing: 10,
-                    runSpacing: 10,
-                    children: [
-                      FilledButton.icon(
-                        onPressed: () => _showNodeDialog(context),
-                        icon: const Icon(Icons.add),
-                        label: const Text('Novo tópico'),
-                      ),
-                      OutlinedButton.icon(
-                        onPressed: _showManualQuestionSelection,
-                        icon: const Icon(Icons.checklist),
-                        label: const Text('Selecionar questões da trilha'),
-                      ),
-                      OutlinedButton.icon(
-                        onPressed: _showTopicQuizBuilder,
-                        icon: const Icon(Icons.account_tree_outlined),
-                        label: const Text('Montar simulado por tópicos'),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 18),
-                  _buildFilters(),
-                  const SizedBox(height: 18),
+                  if (widget.track.description.isNotEmpty)
+                    Text(
+                      widget.track.description,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: DunotsColors.muted),
+                    ),
+                  if (widget.track.description.isNotEmpty)
+                    const SizedBox(height: 10),
                 ];
                 if (compact) {
                   return ListView(
+                    key: const PageStorageKey('study-track-node-list'),
+                    controller: _nodeListController,
                     padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
                     children: [
                       ...header,
@@ -220,11 +237,16 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
           ),
         );
       case StudyNodesStatus.data:
+        final nextNode = _findNextNode(visibleNodes);
         if (compact) {
-          final rows = _flattenNodeTree(visibleNodes);
+          final rows = _flattenVisibleNodeRows(visibleNodes);
           return Column(
             children: [
               _buildProgress(state.nodes),
+              if (nextNode != null) ...[
+                const SizedBox(height: 12),
+                _buildNextTopic(context, nextNode),
+              ],
               const SizedBox(height: 14),
               if (visibleNodes.isEmpty)
                 const Text('Nenhum tópico corresponde aos filtros.')
@@ -235,6 +257,7 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
                     row.node,
                     row.depth,
                     visibleNodes,
+                    isNext: row.node.id == nextNode?.id,
                   ),
                 ),
             ],
@@ -243,6 +266,10 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
         return Column(
           children: [
             _buildProgress(state.nodes),
+            if (nextNode != null) ...[
+              const SizedBox(height: 12),
+              _buildNextTopic(context, nextNode),
+            ],
             const SizedBox(height: 14),
             Expanded(
               child: visibleNodes.isEmpty
@@ -251,8 +278,10 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
                     )
                   : Builder(
                       builder: (context) {
-                        final rows = _flattenNodeTree(visibleNodes);
+                        final rows = _flattenVisibleNodeRows(visibleNodes);
                         return ListView.builder(
+                          key: const PageStorageKey('study-track-node-list'),
+                          controller: _nodeListController,
                           scrollCacheExtent: ScrollCacheExtent.pixels(1200),
                           itemCount: rows.length,
                           itemBuilder: (context, index) {
@@ -262,6 +291,7 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
                               row.node,
                               row.depth,
                               visibleNodes,
+                              isNext: row.node.id == nextNode?.id,
                             );
                           },
                         );
@@ -273,112 +303,320 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
     }
   }
 
-  Widget _buildFilters() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        TextField(
-          key: const ValueKey('study-node-search'),
-          onChanged: (value) => setState(() => _searchQuery = value),
-          decoration: const InputDecoration(
-            prefixIcon: Icon(Icons.search),
-            labelText: 'Buscar tópico',
-            hintText: 'Título, descrição ou anotação',
-          ),
-        ),
-        const SizedBox(height: 10),
-        LayoutBuilder(
-          builder: (context, constraints) {
-            final width = constraints.maxWidth < 540
-                ? constraints.maxWidth
-                : (constraints.maxWidth - 10) / 2;
-            return Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              children: [
-                SizedBox(
-                  width: width,
-                  child: DropdownButtonFormField<StudyPriority?>(
-                    initialValue: _priorityFilter,
-                    decoration: const InputDecoration(labelText: 'Prioridade'),
-                    items: [
-                      const DropdownMenuItem<StudyPriority?>(
-                        value: null,
-                        child: Text('Todas'),
+  Future<void> _showNodeSearchAndFilters() async {
+    final searchController = TextEditingController(text: _searchQuery);
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            return SafeArea(
+              top: false,
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      'Buscar e filtrar',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      key: const ValueKey('study-node-search'),
+                      controller: searchController,
+                      onChanged: (value) {
+                        setState(() => _searchQuery = value);
+                        setSheetState(() {});
+                      },
+                      decoration: const InputDecoration(
+                        prefixIcon: Icon(Icons.search),
+                        labelText: 'Buscar tópicos',
+                        hintText: 'Título, descrição ou anotação',
                       ),
-                      ...StudyPriority.values
-                          .where((priority) => priority != StudyPriority.none)
-                          .map(
-                            (priority) => DropdownMenuItem<StudyPriority?>(
-                              value: priority,
-                              child: Text(_priorityLabel(priority)),
+                    ),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<StudyPriority?>(
+                      initialValue: _priorityFilter,
+                      decoration: const InputDecoration(
+                        labelText: 'Prioridade',
+                      ),
+                      items: [
+                        const DropdownMenuItem<StudyPriority?>(
+                          value: null,
+                          child: Text('Todas'),
+                        ),
+                        ...StudyPriority.values
+                            .where((priority) => priority != StudyPriority.none)
+                            .map(
+                              (priority) => DropdownMenuItem<StudyPriority?>(
+                                value: priority,
+                                child: Text(_priorityLabel(priority)),
+                              ),
                             ),
-                          ),
-                    ],
-                    onChanged: (priority) =>
-                        setState(() => _priorityFilter = priority),
-                  ),
-                ),
-                SizedBox(
-                  width: width,
-                  child: DropdownButtonFormField<StudyNodeCompletionFilter>(
-                    initialValue: _completionFilter,
-                    decoration: const InputDecoration(labelText: 'Status'),
-                    items: const [
-                      DropdownMenuItem(
-                        value: StudyNodeCompletionFilter.all,
-                        child: Text('Todos'),
-                      ),
-                      DropdownMenuItem(
-                        value: StudyNodeCompletionFilter.pending,
-                        child: Text('Pendentes'),
-                      ),
-                      DropdownMenuItem(
-                        value: StudyNodeCompletionFilter.completed,
-                        child: Text('Concluídos'),
-                      ),
-                    ],
-                    onChanged: (filter) {
-                      if (filter != null) {
+                      ],
+                      onChanged: (priority) {
+                        setState(() => _priorityFilter = priority);
+                        setSheetState(() {});
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<StudyNodeCompletionFilter>(
+                      initialValue: _completionFilter,
+                      decoration: const InputDecoration(labelText: 'Status'),
+                      items: const [
+                        DropdownMenuItem(
+                          value: StudyNodeCompletionFilter.all,
+                          child: Text('Todos'),
+                        ),
+                        DropdownMenuItem(
+                          value: StudyNodeCompletionFilter.pending,
+                          child: Text('Pendentes'),
+                        ),
+                        DropdownMenuItem(
+                          value: StudyNodeCompletionFilter.completed,
+                          child: Text('Concluídos'),
+                        ),
+                      ],
+                      onChanged: (filter) {
+                        if (filter == null) return;
                         setState(() => _completionFilter = filter);
-                      }
-                    },
-                  ),
+                        setSheetState(() {});
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: () {
+                          setState(() {
+                            _searchQuery = '';
+                            _priorityFilter = null;
+                            _completionFilter = StudyNodeCompletionFilter.all;
+                          });
+                          Navigator.of(sheetContext).pop();
+                        },
+                        child: const Text('Limpar filtros'),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             );
           },
-        ),
-      ],
+        );
+      },
     );
+    searchController.dispose();
   }
 
   Widget _buildProgress(List<StudyNode> nodes) {
-    final completed = nodes.where((node) => node.isCompleted).length;
+    final completed = nodes
+        .where(
+          (node) =>
+              node.isCompleted || node.status == StudyNodeStatus.completed,
+        )
+        .length;
     final progress = nodes.isEmpty ? 0.0 : completed / nodes.length;
+    final percent = (progress * 100).round();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Wrap(
-          spacing: 8,
-          runSpacing: 4,
-          alignment: WrapAlignment.spaceBetween,
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            const Text(
-              'Progresso',
-              style: TextStyle(fontWeight: FontWeight.w700),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '$percent%',
+                  style: Theme.of(context).textTheme.displaySmall?.copyWith(
+                    color: DunotsColors.ink,
+                    fontWeight: FontWeight.w800,
+                    height: 0.95,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  '$completed de ${nodes.length} ${nodes.length == 1 ? 'item' : 'itens'}',
+                  style: const TextStyle(
+                    color: DunotsColors.muted,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
             ),
-            Text('$completed/${nodes.length} itens concluídos'),
           ],
         ),
         const SizedBox(height: 8),
-        LinearProgressIndicator(value: progress),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(99),
+          child: LinearProgressIndicator(
+            value: progress,
+            minHeight: 7,
+            color: DunotsColors.mint,
+            backgroundColor: DunotsColors.border,
+          ),
+        ),
       ],
     );
   }
 
-  List<_VisibleNodeRow> _flattenNodeTree(List<StudyNode> nodes) {
+  Widget _buildNextTopic(BuildContext context, StudyNode node) {
+    return Semantics(
+      button: true,
+      label: 'Próximo tópico: ${node.title}',
+      onTapHint: 'Abrir próximo tópico',
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: () => _openNodeDetails(context, node),
+          child: Ink(
+            padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+            decoration: BoxDecoration(
+              color: DunotsColors.surfaceSubtle,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: DunotsColors.emerald, width: 1.2),
+            ),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.play_arrow_rounded,
+                  color: DunotsColors.emerald,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Próximo tópico',
+                        style: TextStyle(
+                          color: DunotsColors.emerald,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '→ ${node.title}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.chevron_right, color: DunotsColors.muted),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  StudyNode? _findNextNode(List<StudyNode> nodes) {
+    final pending = nodes
+        .where(
+          (node) =>
+              !node.isCompleted && node.status != StudyNodeStatus.completed,
+        )
+        .toList();
+    if (pending.isEmpty) return null;
+
+    final pendingIds = pending.map((node) => node.id).toSet();
+    bool hasPendingDescendant(String nodeId) {
+      final children = nodes.where((node) => node.parentId == nodeId);
+      for (final child in children) {
+        if (pendingIds.contains(child.id) || hasPendingDescendant(child.id)) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    final leaves = pending
+        .where((node) => !hasPendingDescendant(node.id))
+        .toList();
+    final candidates = leaves.isEmpty ? pending : leaves;
+
+    candidates.sort((a, b) {
+      final priority = _priorityRank(b.priority)
+          .compareTo(_priorityRank(a.priority));
+      if (priority != 0) return priority;
+      return a.sortOrder.compareTo(b.sortOrder);
+    });
+    return candidates.first;
+  }
+
+  int _priorityRank(StudyPriority priority) {
+    switch (priority) {
+      case StudyPriority.none:
+        return 0;
+      case StudyPriority.low:
+        return 1;
+      case StudyPriority.medium:
+        return 2;
+      case StudyPriority.high:
+        return 3;
+      case StudyPriority.urgent:
+        return 4;
+    }
+  }
+
+  String _nodeStatusLabel(StudyNode node, int completedMaterials) {
+    switch (_effectiveNodeStatus(node, completedMaterials)) {
+      case StudyNodeStatus.todo:
+        return 'A fazer';
+      case StudyNodeStatus.inProgress:
+        return 'Em andamento';
+      case StudyNodeStatus.review:
+        return 'Revisar';
+      case StudyNodeStatus.completed:
+        return 'Concluído';
+    }
+  }
+
+  StudyNodeStatus _effectiveNodeStatus(StudyNode node, int completedMaterials) {
+    if (node.isCompleted || node.status == StudyNodeStatus.completed) {
+      return StudyNodeStatus.completed;
+    }
+    if (node.status != StudyNodeStatus.todo) return node.status;
+    if (completedMaterials > 0) return StudyNodeStatus.inProgress;
+    return StudyNodeStatus.todo;
+  }
+
+  Color _nodeStatusColor(String status) {
+    switch (status) {
+      case 'Concluído':
+        return DunotsColors.success;
+      case 'Em andamento':
+        return DunotsColors.emerald;
+      case 'Revisar':
+        return DunotsColors.amber;
+      default:
+        return DunotsColors.muted;
+    }
+  }
+
+  List<StudyNode> _subtreeNodes(StudyNode root, List<StudyNode> nodes) {
+    final subtree = <StudyNode>[root];
+    var index = 0;
+    while (index < subtree.length) {
+      final parentId = subtree[index].id;
+      subtree.addAll(nodes.where((node) => node.parentId == parentId));
+      index++;
+    }
+    return subtree;
+  }
+
+  List<_VisibleNodeRow> _flattenVisibleNodeRows(List<StudyNode> nodes) {
     final childrenByParent = <String?, List<StudyNode>>{};
     for (final node in nodes) {
       childrenByParent.putIfAbsent(node.parentId, () => []).add(node);
@@ -391,7 +629,9 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
     void visit(String? parentId, int depth) {
       for (final node in childrenByParent[parentId] ?? const <StudyNode>[]) {
         rows.add(_VisibleNodeRow(node, depth));
-        visit(node.id, depth + 1);
+        if (!_collapsedNodeIds.contains(node.id)) {
+          visit(node.id, depth + 1);
+        }
       }
     }
 
@@ -399,135 +639,208 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
     return rows;
   }
 
+  void _toggleNodeExpansion(String nodeId) {
+    setState(() {
+      if (!_collapsedNodeIds.add(nodeId)) {
+        _collapsedNodeIds.remove(nodeId);
+      }
+    });
+  }
+
   Widget _buildNodeCard(
     BuildContext context,
     StudyNode node,
     int depth,
-    List<StudyNode> visibleNodes,
-  ) {
+    List<StudyNode> visibleNodes, {
+    bool isNext = false,
+  }) {
     final links = _linksByNode[node.id] ?? const <StudyMaterialLink>[];
+    final completedMaterials =
+        _completedMaterialKeysByNode[node.id]?.length ?? 0;
+    final subtree = _subtreeNodes(node, _controller.state.nodes);
+    final completedItems = subtree
+        .where(
+          (candidate) =>
+              candidate.isCompleted ||
+              candidate.status == StudyNodeStatus.completed,
+        )
+        .length;
+    final statusLabel = _nodeStatusLabel(node, completedMaterials);
+    final statusColor = _nodeStatusColor(statusLabel);
+    final hasChildren = visibleNodes.any(
+      (candidate) => candidate.parentId == node.id,
+    );
+    final isCollapsed = _collapsedNodeIds.contains(node.id);
     return Padding(
       padding: EdgeInsets.only(left: depth * 20.0, bottom: 10),
       child: Semantics(
         container: true,
-        label: 'Tópico ${node.title}',
+        button: true,
+        label:
+            'Tópico ${node.title}. Status: $statusLabel${isNext ? '. Próximo tópico.' : '.'}',
         checked: node.isCompleted,
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
-          decoration: BoxDecoration(
-            color: const Color(0xFF292D2A),
+        onTapHint: 'Abrir detalhes do tópico',
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: const Color(0xFF4A504B)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
+            onTap: () => _openNodeDetails(context, node),
+            child: Ink(
+              padding: const EdgeInsets.fromLTRB(12, 9, 6, 9),
+              decoration: BoxDecoration(
+                color: DunotsColors.panel,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: isNext
+                      ? DunotsColors.emerald
+                      : statusColor.withValues(alpha: 0.62),
+                  width: isNext ? 1.5 : 1.2,
+                ),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Icon(
-                    depth == 0
-                        ? Icons.radio_button_unchecked
-                        : Icons.subdirectory_arrow_right,
-                    color: depth == 0
-                        ? const Color(0xFF78B8FF)
-                        : const Color(0xFFB79BFF),
-                  ),
-                  const SizedBox(width: 10),
-                  Semantics(
+                  if (hasChildren)
+                    IconButton(
+                      tooltip: isCollapsed
+                          ? 'Expandir grupo'
+                          : 'Recolher grupo',
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(
+                        minWidth: 44,
+                        minHeight: 44,
+                      ),
+                      icon: Icon(
+                        isCollapsed ? Icons.chevron_right : Icons.expand_more,
+                      ),
+                      onPressed: () => _toggleNodeExpansion(node.id),
+                    ),
+                  _StudyCheckbox(
+                    value: node.isCompleted,
                     label: 'Concluir tópico ${node.title}',
-                    child: Checkbox(
-                      value: node.isCompleted,
-                      onChanged: (_) => _toggleCompletion(node.id),
+                    onChanged: (_) => _toggleCompletion(node.id),
+                  ),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            node.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                          if (node.description.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 2),
+                              child: Text(
+                                node.description,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: DunotsColors.muted,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                          const SizedBox(height: 5),
+                          Wrap(
+                            spacing: 5,
+                            runSpacing: 4,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              _NodeStatusChip(
+                                label: statusLabel,
+                                color: statusColor,
+                              ),
+                              if (isNext)
+                                const _NodeStatusChip(
+                                  label: 'Próximo',
+                                  color: DunotsColors.emerald,
+                                ),
+                              if (links.isNotEmpty)
+                                Text(
+                                  '$completedMaterials/${links.length}',
+                                  style: const TextStyle(
+                                    color: DunotsColors.textTertiary,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              if (subtree.length > 1 || links.isEmpty)
+                                Text(
+                                  '$completedItems/${subtree.length} itens',
+                                  style: const TextStyle(
+                                    color: DunotsColors.textTertiary,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                   if (node.priority != StudyPriority.none)
-                    _PriorityFlag(priority: node.priority),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          node.title,
-                          style: const TextStyle(fontWeight: FontWeight.w700),
-                        ),
-                        if (node.description.isNotEmpty) ...[
-                          const SizedBox(height: 3),
-                          Text(
-                            node.description,
-                            style: const TextStyle(
-                              color: Color(0xFFB6B7AD),
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                        if (node.notes.isNotEmpty) ...[
-                          const SizedBox(height: 3),
-                          Text(
-                            node.notes,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Color(0xFFB6B7AD),
-                              fontSize: 12,
-                              fontStyle: FontStyle.italic,
-                            ),
-                          ),
-                        ],
-                        if (links.isNotEmpty) ...[
-                          const SizedBox(height: 4),
-                          Text(
-                            '${_completedMaterialKeysByNode[node.id]?.length ?? 0}/'
-                            '${links.length} materiais estudados',
-                            style: TextStyle(
-                              color: Theme.of(context).colorScheme.primary,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
+                    _PriorityDot(priority: node.priority),
                 ],
               ),
-              Align(
-                alignment: Alignment.centerRight,
-                child: _NodeActions(
-                  canMoveUp: _canMove(node, visibleNodes, direction: -1),
-                  canMoveDown: _canMove(node, visibleNodes, direction: 1),
-                  onAddChild: () => _showNodeDialog(context, parentId: node.id),
-                  onEdit: () => _showNodeDialog(context, node: node),
-                  onDelete: () => _confirmDelete(context, node),
-                  linkedMaterialsCount: links.length,
-                  linkedQuestionCount: links
-                      .where(
-                        (link) =>
-                            link.materialType == StudyMaterialType.question,
-                      )
-                      .length,
-                  onLinkMaterial: () => _showMaterialDialog(context, node),
-                  onOpenMaterials: () => _openLinkedMaterials(context, node),
-                  linkedDiagramCount: links
-                      .where(
-                        (link) =>
-                            link.materialType == StudyMaterialType.diagram,
-                      )
-                      .length,
-                  linkedChallengeCount: links
-                      .where(
-                        (link) =>
-                            link.materialType == StudyMaterialType.challenge,
-                      )
-                      .length,
-                  onOpenDiagram: () => _openLinkedDiagrams(context, node),
-                  onStartChallenges: () => _openLinkedChallenges(context, node),
-                  onStartQuiz: () => _startQuizFromNode(node),
-                  onMoveUp: () => _moveNode(node.id, direction: -1),
-                  onMoveDown: () => _moveNode(node.id, direction: 1),
-                ),
-              ),
-            ],
+            ),
           ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openNodeDetails(BuildContext context, StudyNode node) async {
+    final links = _linksByNode[node.id] ?? const <StudyMaterialLink>[];
+    final catalog = await _materialRepository.getAll();
+    final linkedMaterials = catalog
+        .where(
+          (material) => links.any(
+            (link) =>
+                link.materialId == material.id &&
+                link.materialType == material.type,
+          ),
+        )
+        .toList(growable: false);
+    if (!context.mounted) return;
+    void closeAndRun(VoidCallback action) {
+      Navigator.of(context).pop();
+      action();
+    }
+
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => StudyNodeDetailsPage(
+          node: node,
+          linkedMaterials: linkedMaterials,
+          completedMaterialCount:
+              _completedMaterialKeysByNode[node.id]?.length ?? 0,
+          onAddChild: () =>
+              closeAndRun(() => _showNodeDialog(context, parentId: node.id)),
+          onEdit: () => _editNodeFromDetails(context, node.id),
+          onDelete: () => closeAndRun(() => _confirmDelete(context, node)),
+          onLinkMaterial: () =>
+              closeAndRun(() => _showMaterialDialog(context, node)),
+          onOpenMaterials: () =>
+              closeAndRun(() => _openLinkedMaterials(context, node)),
+          onStartQuiz: () => closeAndRun(() => _startQuizFromNode(node)),
+          canMoveUp: _canMove(node, _controller.state.nodes, direction: -1),
+          canMoveDown: _canMove(node, _controller.state.nodes, direction: 1),
+          onMoveUp: () => closeAndRun(() => _moveNode(node.id, direction: -1)),
+          onMoveDown: () => closeAndRun(() => _moveNode(node.id, direction: 1)),
+          onToggleCompletion: () =>
+              closeAndRun(() => _toggleCompletion(node.id)),
+          onStatusChanged: (status) async {
+            Navigator.of(context).pop();
+            await _controller.setStatus(node.id, status);
+            await _syncTrackProgress();
+          },
         ),
       ),
     );
@@ -552,9 +865,9 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
           child: Container(
             padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
             decoration: BoxDecoration(
-              color: const Color(0xFF292D2A),
+              color: DunotsColors.panel,
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: const Color(0xFF4A504B)),
+              border: Border.all(color: DunotsColors.border),
             ),
             child: Row(
               children: [
@@ -563,8 +876,8 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
                       ? Icons.radio_button_unchecked
                       : Icons.subdirectory_arrow_right,
                   color: depth == 0
-                      ? const Color(0xFF78B8FF)
-                      : const Color(0xFFB79BFF),
+                      ? DunotsColors.emerald
+                      : DunotsColors.purple,
                 ),
                 const SizedBox(width: 10),
                 Checkbox(
@@ -572,7 +885,7 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
                   onChanged: (_) => _toggleCompletion(node.id),
                 ),
                 if (node.priority != StudyPriority.none)
-                  _PriorityFlag(priority: node.priority),
+                  _PriorityDot(priority: node.priority),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -586,7 +899,7 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
                         Text(
                           node.description,
                           style: const TextStyle(
-                            color: Color(0xFFB6B7AD),
+                            color: DunotsColors.muted,
                             fontSize: 12,
                           ),
                         ),
@@ -598,7 +911,7 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
-                            color: Color(0xFFB6B7AD),
+                            color: DunotsColors.muted,
                             fontSize: 12,
                             fontStyle: FontStyle.italic,
                           ),
@@ -636,25 +949,6 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
                       0,
                   onLinkMaterial: () => _showMaterialDialog(context, node),
                   onOpenMaterials: () => _openLinkedMaterials(context, node),
-                  linkedDiagramCount:
-                      _linksByNode[node.id]
-                          ?.where(
-                            (link) =>
-                                link.materialType == StudyMaterialType.diagram,
-                          )
-                          .length ??
-                      0,
-                  linkedChallengeCount:
-                      _linksByNode[node.id]
-                          ?.where(
-                            (link) =>
-                                link.materialType ==
-                                StudyMaterialType.challenge,
-                          )
-                          .length ??
-                      0,
-                  onOpenDiagram: () => _openLinkedDiagrams(context, node),
-                  onStartChallenges: () => _openLinkedChallenges(context, node),
                   onStartQuiz: () => _startQuizFromNode(node),
                   onMoveUp: () => _moveNode(node.id, direction: -1),
                   onMoveDown: () => _moveNode(node.id, direction: 1),
@@ -760,7 +1054,7 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
       return;
     }
 
-    final links = await showDialog<List<StudyMaterialLink>>(
+    final links = await showDunotsDrawer<List<StudyMaterialLink>>(
       context: context,
       builder: (_) => _MaterialLinkDialog(
         nodeId: node.id,
@@ -775,86 +1069,6 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
 
     await _materialLinkRepository.replaceForNode(node.id, links);
     await _loadLinks();
-  }
-
-  Future<void> _openLinkedDiagrams(BuildContext context, StudyNode node) async {
-    final links = (_linksByNode[node.id] ?? const [])
-        .where((link) => link.materialType == StudyMaterialType.diagram)
-        .toList(growable: false);
-    final diagrams = await _diagramRepository.getAll();
-    final linked = diagrams
-        .where((diagram) => links.any((link) => link.materialId == diagram.id))
-        .toList(growable: false);
-    if (!context.mounted) return;
-    if (linked.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Nenhum fluxograma vinculado encontrado.'),
-        ),
-      );
-      return;
-    }
-    final selected = linked.length == 1
-        ? linked.first
-        : await showDialog<StudyDiagram>(
-            context: context,
-            builder: (_) => AlertDialog(
-              title: const Text('Abrir fluxograma'),
-              content: SizedBox(
-                width: double.maxFinite,
-                child: ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: linked.length,
-                  itemBuilder: (context, index) {
-                    final diagram = linked[index];
-                    return ListTile(
-                      leading: const Icon(Icons.account_tree_outlined),
-                      title: Text(diagram.title),
-                      subtitle: Text('${diagram.nodes.length} blocos'),
-                      onTap: () => Navigator.of(context).pop(diagram),
-                    );
-                  },
-                ),
-              ),
-            ),
-          );
-    if (selected == null || !context.mounted) return;
-    await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => DiagramViewerPage(diagram: selected)),
-    );
-  }
-
-  Future<void> _openLinkedChallenges(
-    BuildContext context,
-    StudyNode node,
-  ) async {
-    final repository = widget.challengeRepository;
-    if (repository == null) return;
-    final links = (_linksByNode[node.id] ?? const [])
-        .where((link) => link.materialType == StudyMaterialType.challenge)
-        .toList(growable: false);
-    final challenges = await repository.getAll();
-    final linked = challenges
-        .where(
-          (challenge) => links.any((link) => link.materialId == challenge.id),
-        )
-        .toList(growable: false);
-    if (!context.mounted) return;
-    if (linked.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Nenhum desafio vinculado encontrado.')),
-      );
-      return;
-    }
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => ChallengeStudySessionPage(
-          challenges: linked,
-          repository: repository,
-        ),
-      ),
-    );
-    if (mounted) await _loadLinks();
   }
 
   Future<void> _openLinkedMaterials(
@@ -881,29 +1095,9 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
     }
     final selected = linked.length == 1
         ? linked.first
-        : await showDialog<StudyMaterial>(
+        : await showDunotsDrawer<StudyMaterial>(
             context: context,
-            builder: (_) => AlertDialog(
-              title: const Text('Abrir material vinculado'),
-              content: SizedBox(
-                width: double.maxFinite,
-                height: 420,
-                child: ListView.builder(
-                  itemCount: linked.length,
-                  itemBuilder: (context, index) {
-                    final material = linked[index];
-                    return ListTile(
-                      leading: Icon(_materialTypeIcon(material.type)),
-                      title: Text(material.title),
-                      subtitle: Text(
-                        '${_materialTypeLabel(material.type)} · ${material.subtitle}',
-                      ),
-                      onTap: () => Navigator.of(context).pop(material),
-                    );
-                  },
-                ),
-              ),
-            ),
+            builder: (_) => _LinkedMaterialPickerDialog(materials: linked),
           );
     if (selected == null || !context.mounted) return;
     await _openMaterial(context, node, selected);
@@ -949,24 +1143,6 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
               ) ??
               false;
         }
-      case StudyMaterialType.challenge:
-        final repository = widget.challengeRepository;
-        if (repository == null) return;
-        final challenge = (await repository.getAll())
-            .where((item) => item.id == material.id)
-            .firstOrNull;
-        if (challenge != null && context.mounted) {
-          studied =
-              await Navigator.of(context).push<bool>(
-                MaterialPageRoute(
-                  builder: (_) => ChallengeDetailsPage(
-                    challenge: challenge,
-                    repository: repository,
-                  ),
-                ),
-              ) ??
-              false;
-        }
       case StudyMaterialType.document:
         final repository = widget.documentRepository;
         if (repository == null) return;
@@ -982,8 +1158,6 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
               ) ??
               false;
         }
-      case StudyMaterialType.diagram:
-        await _openLinkedDiagrams(context, node);
     }
     if (studied && context.mounted) {
       await _markMaterialStudied(node, material);
@@ -1014,7 +1188,7 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
       return;
     }
 
-    final selectedIds = await showDialog<List<String>>(
+    final selectedIds = await showDunotsDrawer<List<String>>(
       context: context,
       builder: (_) => _QuestionSelectionDialog(
         questions: linkedQuestions,
@@ -1039,7 +1213,7 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
       return;
     }
 
-    final selectedNodeIds = await showDialog<Set<String>>(
+    final selectedNodeIds = await showDunotsDrawer<Set<String>>(
       context: context,
       builder: (_) => _TopicSelectionDialog(nodes: nodes),
     );
@@ -1066,7 +1240,7 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
       return;
     }
 
-    final selectedQuestionIds = await showDialog<List<String>>(
+    final selectedQuestionIds = await showDunotsDrawer<List<String>>(
       context: context,
       builder: (_) => _QuestionSelectionDialog(
         questions: linkedQuestions,
@@ -1122,7 +1296,7 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
         .map((id) => questionsById[id])
         .whereType<Question>()
         .toList(growable: false);
-    final reviewedQuestionIds = await showDialog<List<String>>(
+    final reviewedQuestionIds = await showDunotsDrawer<List<String>>(
       context: context,
       builder: (_) => _QuizSelectionSummaryDialog(
         questions: orderedQuestions,
@@ -1134,7 +1308,7 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
       return;
     }
 
-    final data = await showDialog<QuizFormData>(
+    final data = await showDunotsDrawer<QuizFormData>(
       context: context,
       builder: (_) => const QuizFormDialog(),
     );
@@ -1202,18 +1376,40 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
     final nodes = _controller.state.nodes;
     await trackRepository.update(
       matchingTracks.first.copyWith(
-        completedItems: nodes.where((node) => node.isCompleted).length,
+        completedItems: nodes
+            .where(
+              (node) =>
+                  node.isCompleted || node.status == StudyNodeStatus.completed,
+            )
+            .length,
         totalItems: nodes.length,
       ),
     );
   }
 
-  Future<void> _showNodeDialog(
+  Future<StudyNode?> _editNodeFromDetails(
+    BuildContext context,
+    String nodeId,
+  ) async {
+    final node = _nodeById(nodeId);
+    if (node == null) return null;
+    final saved = await _showNodeDialog(context, node: node);
+    return saved ? _nodeById(nodeId) : null;
+  }
+
+  StudyNode? _nodeById(String nodeId) {
+    for (final node in _controller.state.nodes) {
+      if (node.id == nodeId) return node;
+    }
+    return null;
+  }
+
+  Future<bool> _showNodeDialog(
     BuildContext context, {
     String? parentId,
     StudyNode? node,
   }) async {
-    final data = await showDialog<_NodeFormData>(
+    final data = await showDunotsDrawer<_NodeFormData>(
       context: context,
       builder: (_) => _NodeFormDialog(
         isChild: parentId != null || node?.parentId != null,
@@ -1222,7 +1418,7 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
     );
 
     if (data == null || !mounted) {
-      return;
+      return false;
     }
 
     try {
@@ -1244,43 +1440,40 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
         );
       }
       await _syncTrackProgress();
+      return true;
     } on ArgumentError catch (error) {
       if (!context.mounted) {
-        return;
+        return false;
       }
 
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(error.message.toString())));
+      return false;
     }
   }
 
   Future<void> _confirmDelete(BuildContext context, StudyNode node) async {
-    final confirmed = await showDialog<bool>(
+    final descendantIds = _descendantIds(node.id);
+    final descendantCount = descendantIds.length - 1;
+    final choice = await showDunotsDrawer<_DeleteNodeChoice>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Excluir tópico?'),
-        content: Text(
-          '"${node.title}" e todos os seus subtópicos serão removidos.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Excluir'),
-          ),
-        ],
+      builder: (_) => _DeleteNodeDrawer(
+        nodeTitle: node.title,
+        descendantCount: descendantCount,
       ),
     );
 
-    if (confirmed != true || !mounted) {
+    if (choice == null || !mounted) {
       return;
     }
 
-    final deletedNodeIds = _descendantIds(node.id);
-    await _controller.deleteNode(node.id);
+    final deletedNodeIds = choice.deleteDescendants
+        ? descendantIds
+        : <String>{node.id};
+    await _controller.deleteNode(
+      node.id,
+      preserveChildren: !choice.deleteDescendants,
+    );
     for (final deletedNodeId in deletedNodeIds) {
       await _materialLinkRepository.deleteForNode(deletedNodeId);
     }
@@ -1307,6 +1500,91 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
   }
 }
 
+class _DeleteNodeChoice {
+  final bool deleteDescendants;
+
+  const _DeleteNodeChoice({required this.deleteDescendants});
+}
+
+class _DeleteNodeDrawer extends StatefulWidget {
+  final String nodeTitle;
+  final int descendantCount;
+
+  const _DeleteNodeDrawer({
+    required this.nodeTitle,
+    required this.descendantCount,
+  });
+
+  @override
+  State<_DeleteNodeDrawer> createState() => _DeleteNodeDrawerState();
+}
+
+class _DeleteNodeDrawerState extends State<_DeleteNodeDrawer> {
+  bool _deleteDescendants = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final hasDescendants = widget.descendantCount > 0;
+    final descendantLabel = widget.descendantCount == 1
+        ? '1 subtópico'
+        : '${widget.descendantCount} subtópicos';
+
+    return DunotsModal(
+      title: 'Excluir tópico?',
+      subtitle: 'Esta ação remove “${widget.nodeTitle}”.',
+      icon: Icons.delete_outline,
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton(
+          style: FilledButton.styleFrom(
+            backgroundColor: theme.colorScheme.error,
+            foregroundColor: theme.colorScheme.onError,
+          ),
+          onPressed: () => Navigator.of(context)
+              .pop(_DeleteNodeChoice(deleteDescendants: _deleteDescendants)),
+          child: const Text('Excluir'),
+        ),
+      ],
+      child: DunotsFormColumn(
+        spacing: 10,
+        children: [
+          Text(
+            hasDescendants
+                ? 'Escolha o que deve acontecer com os subtópicos.'
+                : 'O tópico será removido permanentemente.',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          if (hasDescendants)
+            Material(
+              color: theme.colorScheme.surfaceContainerHighest.withValues(
+                alpha: 0.45,
+              ),
+              borderRadius: BorderRadius.circular(16),
+              clipBehavior: Clip.antiAlias,
+              child: CheckboxListTile(
+                value: _deleteDescendants,
+                onChanged: (value) =>
+                    setState(() => _deleteDescendants = value ?? false),
+                title: Text('Excluir também $descendantLabel'),
+                subtitle: const Text(
+                  'Desmarcado: eles sobem para o mesmo nível deste tópico.',
+                ),
+                controlAffinity: ListTileControlAffinity.leading,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 class _NodeActions extends StatelessWidget {
   final bool canMoveUp;
   final bool canMoveDown;
@@ -1317,12 +1595,8 @@ class _NodeActions extends StatelessWidget {
   final VoidCallback onMoveDown;
   final int linkedMaterialsCount;
   final int linkedQuestionCount;
-  final int linkedDiagramCount;
-  final int linkedChallengeCount;
   final VoidCallback onLinkMaterial;
   final VoidCallback onOpenMaterials;
-  final VoidCallback onOpenDiagram;
-  final VoidCallback onStartChallenges;
   final VoidCallback onStartQuiz;
 
   const _NodeActions({
@@ -1335,98 +1609,123 @@ class _NodeActions extends StatelessWidget {
     required this.onMoveDown,
     required this.linkedMaterialsCount,
     required this.linkedQuestionCount,
-    required this.linkedDiagramCount,
-    required this.linkedChallengeCount,
     required this.onLinkMaterial,
     required this.onOpenMaterials,
-    required this.onOpenDiagram,
-    required this.onStartChallenges,
     required this.onStartQuiz,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Column(
+    final compact = MediaQuery.sizeOf(context).width < 520;
+    return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Wrap(
-          spacing: 0,
-          runSpacing: 0,
-          alignment: WrapAlignment.end,
-          children: [
-            IconButton(
-              tooltip: 'Adicionar subtópico',
-              onPressed: onAddChild,
-              icon: const Icon(Icons.add_circle_outline),
+        IconButton(
+          tooltip: 'Adicionar subtópico',
+          onPressed: onAddChild,
+          visualDensity: VisualDensity.compact,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+          icon: const Icon(Icons.add, size: 20),
+        ),
+        PopupMenuButton<String>(
+          tooltip: 'Mais ações do tópico',
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+          icon: const Icon(Icons.more_vert, size: 20),
+          onSelected: (value) {
+            switch (value) {
+              case 'edit':
+                onEdit();
+              case 'delete':
+                onDelete();
+              case 'link':
+                onLinkMaterial();
+              case 'materials':
+                onOpenMaterials();
+              case 'quiz':
+                onStartQuiz();
+              case 'moveUp':
+                onMoveUp();
+              case 'moveDown':
+                onMoveDown();
+            }
+          },
+          itemBuilder: (context) => [
+            const PopupMenuItem(
+              value: 'edit',
+              child: _NodeMenuItem(icon: Icons.edit_outlined, label: 'Editar'),
             ),
-            IconButton(
-              tooltip: 'Editar tópico',
-              onPressed: onEdit,
-              icon: const Icon(Icons.edit_outlined),
-            ),
-            IconButton(
-              tooltip: 'Excluir tópico',
-              onPressed: onDelete,
-              icon: const Icon(Icons.delete_outline),
-            ),
-            IconButton(
-              tooltip: 'Vincular material',
-              onPressed: onLinkMaterial,
-              icon: Badge(
-                isLabelVisible: linkedMaterialsCount > 0,
-                label: Text('$linkedMaterialsCount'),
-                child: const Icon(Icons.link),
+            const PopupMenuItem(
+              value: 'link',
+              child: _NodeMenuItem(
+                icon: Icons.link,
+                label: 'Vincular material',
               ),
             ),
-            IconButton(
-              tooltip: 'Estudar desafios vinculados',
-              onPressed: linkedChallengeCount == 0 ? null : onStartChallenges,
-              icon: Badge(
-                isLabelVisible: linkedChallengeCount > 0,
-                label: Text('$linkedChallengeCount'),
-                child: const Icon(Icons.code_outlined),
+            PopupMenuItem(
+              value: 'materials',
+              enabled: linkedMaterialsCount > 0,
+              child: _NodeMenuItem(
+                icon: Icons.open_in_new,
+                label: 'Abrir materiais ($linkedMaterialsCount)',
               ),
             ),
-            IconButton(
-              tooltip: 'Abrir material vinculado',
-              onPressed: linkedMaterialsCount == 0 ? null : onOpenMaterials,
-              icon: const Icon(Icons.open_in_new),
-            ),
-            IconButton(
-              tooltip: 'Abrir fluxograma vinculado',
-              onPressed: linkedDiagramCount == 0 ? null : onOpenDiagram,
-              icon: Badge(
-                isLabelVisible: linkedDiagramCount > 0,
-                label: Text('$linkedDiagramCount'),
-                child: const Icon(Icons.account_tree_outlined),
+            PopupMenuItem(
+              value: 'quiz',
+              enabled: linkedQuestionCount > 0,
+              child: _NodeMenuItem(
+                icon: Icons.quiz_outlined,
+                label: 'Montar simulado ($linkedQuestionCount)',
               ),
             ),
-            IconButton(
-              tooltip: 'Montar simulado com questões vinculadas',
-              onPressed: linkedQuestionCount == 0 ? null : onStartQuiz,
-              icon: Badge(
-                isLabelVisible: linkedQuestionCount > 0,
-                label: Text('$linkedQuestionCount'),
-                child: const Icon(Icons.quiz_outlined),
+            if (compact) ...[
+              const PopupMenuDivider(),
+              PopupMenuItem(
+                value: 'moveUp',
+                enabled: canMoveUp,
+                child: const _NodeMenuItem(
+                  icon: Icons.keyboard_arrow_up,
+                  label: 'Mover para cima',
+                ),
+              ),
+              PopupMenuItem(
+                value: 'moveDown',
+                enabled: canMoveDown,
+                child: const _NodeMenuItem(
+                  icon: Icons.keyboard_arrow_down,
+                  label: 'Mover para baixo',
+                ),
+              ),
+            ],
+            const PopupMenuDivider(),
+            const PopupMenuItem(
+              value: 'delete',
+              child: _NodeMenuItem(
+                icon: Icons.delete_outline,
+                label: 'Excluir tópico',
               ),
             ),
           ],
         ),
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            IconButton(
-              tooltip: 'Mover para cima',
-              onPressed: canMoveUp ? onMoveUp : null,
-              icon: const Icon(Icons.keyboard_arrow_up),
-            ),
-            IconButton(
-              tooltip: 'Mover para baixo',
-              onPressed: canMoveDown ? onMoveDown : null,
-              icon: const Icon(Icons.keyboard_arrow_down),
-            ),
-          ],
-        ),
+      ],
+    );
+  }
+}
+
+class _NodeMenuItem extends StatelessWidget {
+  final IconData icon;
+  final String label;
+
+  const _NodeMenuItem({required this.icon, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, size: 20),
+        const SizedBox(width: 12),
+        Flexible(child: Text(label, overflow: TextOverflow.ellipsis)),
       ],
     );
   }
@@ -1461,6 +1760,58 @@ class _MaterialLinkDialog extends StatefulWidget {
   State<_MaterialLinkDialog> createState() => _MaterialLinkDialogState();
 }
 
+class _LinkedMaterialPickerDialog extends StatelessWidget {
+  final List<StudyMaterial> materials;
+
+  const _LinkedMaterialPickerDialog({required this.materials});
+
+  @override
+  Widget build(BuildContext context) {
+    final listHeight = (MediaQuery.sizeOf(context).height * 0.46)
+        .clamp(200.0, 420.0)
+        .toDouble();
+
+    return DunotsModal(
+      title: 'Abrir material vinculado',
+      subtitle: 'Escolha o material que deseja abrir.',
+      icon: Icons.link_outlined,
+      scrollable: false,
+      // ignore: sort_child_properties_last
+      child: SizedBox(
+        height: listHeight,
+        child: ListView.separated(
+          itemCount: materials.length,
+          separatorBuilder: (_, _) => const Divider(height: 1),
+          itemBuilder: (context, index) {
+            final material = materials[index];
+            return ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(_materialTypeIcon(material.type)),
+              title: Text(
+                material.title,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              subtitle: Text(
+                '${_materialTypeLabel(material.type)} · ${material.subtitle}',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              onTap: () => Navigator.of(context).pop(material),
+            );
+          },
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancelar'),
+        ),
+      ],
+    );
+  }
+}
+
 class _TopicSelectionDialog extends StatefulWidget {
   final List<StudyNode> nodes;
 
@@ -1484,16 +1835,22 @@ class _TopicSelectionDialogState extends State<_TopicSelectionDialog> {
       return normalizedQuery.isEmpty || searchable.contains(normalizedQuery);
     }).toList();
 
-    return AlertDialog(
-      title: const Text('Selecionar tópicos'),
-      content: SizedBox(
-        width: 560,
-        height: 460,
+    return DunotsModal(
+      title: 'Selecionar tópicos',
+      subtitle: 'Escolha os tópicos que farão parte do simulado.',
+      icon: Icons.topic_outlined,
+      scrollable: false,
+      // ignore: sort_child_properties_last
+      child: SizedBox(
+        width: double.infinity,
+        height: (MediaQuery.sizeOf(context).height * 0.52)
+            .clamp(260.0, 520.0)
+            .toDouble(),
         child: Column(
           children: [
             Text(
               '${selectedIds.length} selecionado(s) de ${widget.nodes.length}',
-              style: const TextStyle(color: Color(0xFFB6B7AD)),
+              style: const TextStyle(color: DunotsColors.muted),
             ),
             const SizedBox(height: 10),
             TextField(
@@ -1600,17 +1957,23 @@ class _QuizSelectionSummaryDialogState
         .whereType<Question>()
         .toList(growable: false);
 
-    return AlertDialog(
-      title: const Text('Revisar seleção'),
-      content: SizedBox(
-        width: 600,
-        height: 500,
+    return DunotsModal(
+      title: 'Revisar seleção',
+      subtitle: 'Remova questões antes de criar o simulado.',
+      icon: Icons.fact_check_outlined,
+      scrollable: false,
+      // ignore: sort_child_properties_last
+      child: SizedBox(
+        width: double.infinity,
+        height: (MediaQuery.sizeOf(context).height * 0.54)
+            .clamp(280.0, 560.0)
+            .toDouble(),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               '${selectedQuestions.length} questão(ões) no simulado',
-              style: const TextStyle(color: Color(0xFFB6B7AD)),
+              style: const TextStyle(color: DunotsColors.muted),
             ),
             const SizedBox(height: 12),
             Expanded(
@@ -1751,16 +2114,22 @@ class _QuestionSelectionDialogState extends State<_QuestionSelectionDialog> {
       return normalizedQuery.isEmpty || searchable.contains(normalizedQuery);
     }).toList();
 
-    return AlertDialog(
-      title: const Text('Selecionar questões'),
-      content: SizedBox(
-        width: 560,
-        height: 500,
+    return DunotsModal(
+      title: 'Selecionar questões',
+      subtitle: 'Filtre e escolha as questões que entrarão no simulado.',
+      icon: Icons.quiz_outlined,
+      scrollable: false,
+      // ignore: sort_child_properties_last
+      child: SizedBox(
+        width: double.infinity,
+        height: (MediaQuery.sizeOf(context).height * 0.54)
+            .clamp(280.0, 560.0)
+            .toDouble(),
         child: Column(
           children: [
             Text(
               '${selectedIds.length} selecionada(s) de ${widget.questions.length}',
-              style: const TextStyle(color: Color(0xFFB6B7AD)),
+              style: const TextStyle(color: DunotsColors.muted),
             ),
             const SizedBox(height: 10),
             TextField(
@@ -1851,11 +2220,17 @@ class _MaterialLinkDialogState extends State<_MaterialLinkDialog> {
           );
     }).toList();
 
-    return AlertDialog(
-      title: const Text('Vincular materiais'),
-      content: SizedBox(
-        width: double.maxFinite,
-        height: 420,
+    return DunotsModal(
+      title: 'Vincular materiais',
+      subtitle: 'Associe flashcards, questões e documentos.',
+      icon: Icons.link_outlined,
+      scrollable: false,
+      // ignore: sort_child_properties_last
+      child: SizedBox(
+        width: double.infinity,
+        height: (MediaQuery.sizeOf(context).height * 0.48)
+            .clamp(240.0, 480.0)
+            .toDouble(),
         child: Column(
           children: [
             TextField(
@@ -1923,12 +2298,8 @@ String _materialTypeLabel(StudyMaterialType type) {
       return 'Flashcard';
     case StudyMaterialType.question:
       return 'Questão';
-    case StudyMaterialType.challenge:
-      return 'Desafio';
     case StudyMaterialType.document:
       return 'Material';
-    case StudyMaterialType.diagram:
-      return 'Fluxograma';
   }
 }
 
@@ -1938,19 +2309,71 @@ IconData _materialTypeIcon(StudyMaterialType type) {
       return Icons.style_outlined;
     case StudyMaterialType.question:
       return Icons.quiz_outlined;
-    case StudyMaterialType.challenge:
-      return Icons.code_outlined;
     case StudyMaterialType.document:
       return Icons.description_outlined;
-    case StudyMaterialType.diagram:
-      return Icons.account_tree_outlined;
   }
 }
 
-class _PriorityFlag extends StatelessWidget {
+class _StudyCheckbox extends StatelessWidget {
+  final bool value;
+  final String label;
+  final ValueChanged<bool?> onChanged;
+
+  const _StudyCheckbox({
+    required this.value,
+    required this.label,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      container: true,
+      button: true,
+      checked: value,
+      label: label,
+      onTapHint: value ? 'Marcar como pendente' : 'Marcar como concluído',
+      onTap: () => onChanged(!value),
+      child: InkResponse(
+        onTap: () => onChanged(!value),
+        radius: 24,
+        containedInkWell: true,
+        customBorder: const CircleBorder(),
+        child: SizedBox(
+          width: 44,
+          height: 44,
+          child: Center(
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 160),
+              width: 22,
+              height: 22,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: value ? DunotsColors.emerald : Colors.transparent,
+                border: Border.all(
+                  color: value ? DunotsColors.emerald : DunotsColors.muted,
+                  width: 2,
+                ),
+              ),
+              child: value
+                  ? const Icon(
+                      Icons.check,
+                      size: 15,
+                      color: DunotsColors.background,
+                    )
+                  : null,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PriorityDot extends StatelessWidget {
   final StudyPriority priority;
 
-  const _PriorityFlag({required this.priority});
+  const _PriorityDot({required this.priority});
 
   @override
   Widget build(BuildContext context) {
@@ -1958,7 +2381,54 @@ class _PriorityFlag extends StatelessWidget {
       message: _priorityLabel(priority),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 4),
-        child: Icon(Icons.flag, color: _priorityColor(priority)),
+        child: Semantics(
+          label: _priorityLabel(priority),
+          child: Container(
+            width: 9,
+            height: 9,
+            decoration: BoxDecoration(
+              color: _priorityColor(priority),
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: _priorityColor(priority).withValues(alpha: 0.42),
+                  blurRadius: 5,
+                  spreadRadius: 1,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _NodeStatusChip extends StatelessWidget {
+  final String label;
+  final Color color;
+
+  const _NodeStatusChip({required this.label, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.14),
+        border: Border.all(color: color.withValues(alpha: 0.34)),
+        borderRadius: BorderRadius.circular(7),
+      ),
+      child: Text(
+        label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          color: color,
+          fontSize: 10,
+          fontWeight: FontWeight.w800,
+          height: 1.1,
+        ),
       ),
     );
   }
@@ -1982,15 +2452,15 @@ String _priorityLabel(StudyPriority priority) {
 Color _priorityColor(StudyPriority priority) {
   switch (priority) {
     case StudyPriority.none:
-      return const Color(0xFFB6B7AD);
+      return DunotsColors.muted;
     case StudyPriority.low:
-      return const Color(0xFF78B8FF);
+      return DunotsColors.mint;
     case StudyPriority.medium:
-      return const Color(0xFFFFD166);
+      return DunotsColors.amber;
     case StudyPriority.high:
-      return const Color(0xFFFF9F68);
+      return DunotsColors.emerald;
     case StudyPriority.urgent:
-      return const Color(0xFFFF7168);
+      return DunotsColors.danger;
   }
 }
 
@@ -2032,74 +2502,82 @@ class _NodeFormDialogState extends State<_NodeFormDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(
-        widget.node == null
-            ? (widget.isChild ? 'Novo subtópico' : 'Novo tópico')
-            : 'Editar tópico',
-      ),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: titleController,
-              autofocus: true,
-              decoration: const InputDecoration(
-                labelText: 'Título',
-                hintText: 'Ex.: Arquiteturas de rede',
-              ),
+    return DunotsModal(
+      title: widget.node == null
+          ? (widget.isChild ? 'Novo subtópico' : 'Novo tópico')
+          : 'Editar tópico',
+      icon: widget.isChild ? Icons.account_tree_outlined : Icons.topic_outlined,
+      // ignore: sort_child_properties_last
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: titleController,
+            autofocus: true,
+            decoration: const InputDecoration(
+              labelText: 'Título',
+              hintText: 'Ex.: Arquiteturas de rede',
             ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: descriptionController,
-              maxLines: 3,
-              decoration: const InputDecoration(
-                labelText: 'Descrição (opcional)',
-              ),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: descriptionController,
+            maxLines: 3,
+            decoration: const InputDecoration(
+              labelText: 'Descrição (opcional)',
             ),
-            const SizedBox(height: 12),
-            DropdownButtonFormField<StudyPriority>(
-              initialValue: selectedPriority,
-              decoration: const InputDecoration(labelText: 'Prioridade'),
-              items: StudyPriority.values
-                  .map(
-                    (priority) => DropdownMenuItem(
-                      value: priority,
-                      child: Row(
-                        children: [
-                          Icon(Icons.flag, color: _priorityColor(priority)),
-                          const SizedBox(width: 8),
-                          Text(_priorityLabel(priority)),
-                        ],
-                      ),
+          ),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<StudyPriority>(
+            initialValue: selectedPriority,
+            isExpanded: true,
+            decoration: const InputDecoration(labelText: 'Prioridade'),
+            items: StudyPriority.values
+                .map(
+                  (priority) => DropdownMenuItem(
+                    value: priority,
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.flag,
+                          color: _priorityColor(priority),
+                          size: 18,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _priorityLabel(priority),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
                     ),
-                  )
-                  .toList(),
-              onChanged: (priority) {
-                if (priority != null) {
-                  setState(() => selectedPriority = priority);
-                }
-              },
+                  ),
+                )
+                .toList(),
+            onChanged: (priority) {
+              if (priority != null) {
+                setState(() => selectedPriority = priority);
+              }
+            },
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: notesController,
+            maxLines: 4,
+            decoration: const InputDecoration(
+              labelText: 'Anotações (opcional)',
+              hintText: 'Registre observações para este tópico',
             ),
+          ),
+          if (validationError != null) ...[
             const SizedBox(height: 12),
-            TextField(
-              controller: notesController,
-              maxLines: 4,
-              decoration: const InputDecoration(
-                labelText: 'Anotações (opcional)',
-                hintText: 'Registre observações para este tópico',
-              ),
+            Text(
+              validationError!,
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
             ),
-            if (validationError != null) ...[
-              const SizedBox(height: 12),
-              Text(
-                validationError!,
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
-              ),
-            ],
           ],
-        ),
+        ],
       ),
       actions: [
         TextButton(
