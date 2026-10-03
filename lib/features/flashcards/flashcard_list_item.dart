@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../app/dunots_theme.dart';
+
 import 'package:dunots_mobile/core/models/flashcard.dart';
 
 import '../questions/data/question_repository.dart';
@@ -27,69 +29,103 @@ class FlashcardListItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: () {
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => FlashcardDetailsPage(
-              card: card,
-              flashcardRepository: flashcardRepository,
-              questionRepository: questionRepository,
-              materialRepository: materialRepository,
-            ),
-          ),
-        );
-      },
+    final tagSummary = card.tags.isEmpty
+        ? ''
+        : ' Tags: ${card.tags.take(3).join(', ')}${card.tags.length > 3 ? ', e mais.' : '.'}';
+    return Semantics(
+      container: true,
+      label: 'Flashcard: ${card.front}. Resposta: ${card.back}.$tagSummary',
+      hint: 'Toque para abrir os detalhes.',
       child: Card(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(15, 14, 8, 14),
-          child: Row(
-            children: [
-              const Icon(Icons.style_outlined, color: Color(0xFF78B8FF)),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      card.front,
-                      style: const TextStyle(fontWeight: FontWeight.w700),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      card.back,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(color: Color(0xFFB6B7AD)),
-                    ),
-                    if (card.tags.isNotEmpty) ...[
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 5,
-                        runSpacing: 4,
-                        children: card.tags
-                            .map((tag) => Chip(label: Text(tag)))
-                            .toList(growable: false),
-                      ),
-                    ],
-                  ],
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => FlashcardDetailsPage(
+                  card: card,
+                  flashcardRepository: flashcardRepository,
+                  questionRepository: questionRepository,
+                  materialRepository: materialRepository,
                 ),
               ),
-              if (onEdit != null || onDelete != null)
-                PopupMenuButton<String>(
-                  onSelected: (value) {
-                    if (value == 'edit') onEdit?.call();
-                    if (value == 'delete') onDelete?.call();
-                  },
-                  itemBuilder: (_) => const [
-                    PopupMenuItem(value: 'edit', child: Text('Editar')),
-                    PopupMenuItem(value: 'delete', child: Text('Excluir')),
-                  ],
-                )
-              else
-                const Icon(Icons.chevron_right_rounded),
-            ],
+            );
+          },
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 11, 4, 11),
+            child: Row(
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: DunotsColors.emerald.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(
+                    Icons.style_outlined,
+                    color: DunotsColors.emerald,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 11),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        card.front,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        card.back,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: DunotsColors.muted,
+                          fontSize: 12,
+                        ),
+                      ),
+                      if (card.tags.isNotEmpty) ...[
+                        const SizedBox(height: 3),
+                        Text(
+                          card.tags.take(2).join(' · '),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: DunotsColors.purple,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                if (onEdit != null || onDelete != null)
+                  PopupMenuButton<String>(
+                    tooltip: 'Ações do flashcard',
+                    icon: const Icon(Icons.more_vert),
+                    onSelected: (value) {
+                      if (value == 'edit') onEdit?.call();
+                      if (value == 'delete') onDelete?.call();
+                    },
+                    itemBuilder: (_) => const [
+                      PopupMenuItem(value: 'edit', child: Text('Editar')),
+                      PopupMenuItem(value: 'delete', child: Text('Excluir')),
+                    ],
+                  )
+                else
+                  const Padding(
+                    padding: EdgeInsets.all(10),
+                    child: Icon(Icons.chevron_right_rounded),
+                  ),
+              ],
+            ),
           ),
         ),
       ),

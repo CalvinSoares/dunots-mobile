@@ -97,7 +97,6 @@ class SqliteFlashcardRepository implements FlashcardRepository {
       'quiz_question_id': card.quizQuestionId,
       'tags': jsonEncode(card.tags),
       'linked_material_ids': jsonEncode(card.linkedMaterialIds),
-      'diagram_ids': jsonEncode(card.diagramIds),
       'created_at': card.createdAt.toIso8601String(),
       'due_at':
           card.dueAt?.toIso8601String() ?? card.createdAt.toIso8601String(),
@@ -121,7 +120,6 @@ class SqliteFlashcardRepository implements FlashcardRepository {
       quizQuestionId: row['quiz_question_id'] as String?,
       tags: _parseTags(row['tags']),
       linkedMaterialIds: _parseTags(row['linked_material_ids']),
-      diagramIds: _parseTags(row['diagram_ids']),
       createdAt: DateTime.parse(row['created_at']! as String),
       dueAt: _parseDate(row['due_at']),
       lastReviewedAt: _parseDate(row['last_reviewed_at']),
