@@ -11,6 +11,7 @@ import 'package:dunots_mobile/features/roadmaps/domain/study_node.dart';
 import 'package:dunots_mobile/features/roadmaps/domain/study_material.dart';
 import 'package:dunots_mobile/features/roadmaps/domain/study_track.dart';
 import 'package:dunots_mobile/features/roadmaps/domain/study_document.dart';
+import 'package:dunots_mobile/features/roadmaps/presentation/study_nodes_controller.dart';
 
 void main() {
   setUpAll(() {
@@ -63,6 +64,7 @@ void main() {
     expect(savedNodes.first.notes, 'Revisar protocolos.');
     expect(savedNodes.first.priority, StudyPriority.high);
     expect(savedNodes.last.isCompleted, isTrue);
+    expect(savedNodes.last.status, StudyNodeStatus.completed);
 
     const link = StudyMaterialLink(
       nodeId: 'node-root',
@@ -136,6 +138,72 @@ void main() {
     expect(
       (await progressRepository.getForNode('node-progress')).single.completedAt,
       importedAt,
+    );
+
+    await appDatabase.close();
+  });
+
+  test('promove subtópicos antes da exclusão em cascata do SQLite', () async {
+    final appDatabase = await AppDatabase.open(
+      databasePathOverride: inMemoryDatabasePath,
+    );
+    final trackRepository = SqliteStudyTrackRepository(appDatabase);
+    final nodeRepository = SqliteStudyNodeRepository(appDatabase);
+    const track = StudyTrack(
+      id: 'track-promote',
+      title: 'Trilha',
+      description: '',
+      completedItems: 0,
+      totalItems: 2,
+    );
+    await trackRepository.create(track);
+    await nodeRepository.create(
+      const StudyNode(
+        id: 'node-parent',
+        trackId: 'track-promote',
+        parentId: null,
+        title: 'Grupo',
+        description: '',
+        sortOrder: 0,
+      ),
+    );
+    await nodeRepository.create(
+      const StudyNode(
+        id: 'node-to-delete',
+        trackId: 'track-promote',
+        parentId: 'node-parent',
+        title: 'Tópico intermediário',
+        description: '',
+        sortOrder: 0,
+      ),
+    );
+    await nodeRepository.create(
+      const StudyNode(
+        id: 'node-to-promote',
+        trackId: 'track-promote',
+        parentId: 'node-to-delete',
+        title: 'Subtópico preservado',
+        description: '',
+        sortOrder: 0,
+      ),
+    );
+
+    final controller = StudyNodesController(
+      trackId: track.id,
+      repository: nodeRepository,
+    );
+    await controller.load();
+    await controller.deleteNode('node-to-delete', preserveChildren: true);
+
+    final nodes = await nodeRepository.getForTrack(track.id);
+    expect(
+      nodes.map((node) => node.id),
+      containsAll(<String>['node-parent', 'node-to-promote']),
+    );
+    expect(nodes.any((node) => node.id == 'node-to-delete'), isFalse);
+    expect(
+      nodes.firstWhere((node) => node.id == 'node-to-promote').parentId,
+      'node-parent',
     );
 
     await appDatabase.close();

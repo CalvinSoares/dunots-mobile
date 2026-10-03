@@ -77,7 +77,68 @@ void main() {
     await controller.toggleCompletion('node-001');
 
     expect(controller.state.nodes.single.isCompleted, isTrue);
+    expect(controller.state.nodes.single.status, StudyNodeStatus.completed);
   });
+
+  test(
+    'atualiza conclusão sem emitir um estado intermediário de loading',
+    () async {
+      final controller = StudyNodesController(
+        trackId: 'track-001',
+        repository: InMemoryStudyNodeRepository(
+          nodes: const [
+            StudyNode(
+              id: 'node-no-flicker',
+              trackId: 'track-001',
+              parentId: null,
+              title: 'Redes',
+              description: '',
+              sortOrder: 0,
+            ),
+          ],
+        ),
+      );
+      await controller.load();
+
+      final emittedStatuses = <StudyNodesStatus>[];
+      controller.addListener(
+        () => emittedStatuses.add(controller.state.status),
+      );
+
+      await controller.toggleCompletion('node-no-flicker');
+
+      expect(emittedStatuses, [StudyNodesStatus.data]);
+      expect(controller.state.nodes.single.isCompleted, isTrue);
+    },
+  );
+
+  test(
+    'altera o status explícito sem transformar revisão em conclusão',
+    () async {
+      final controller = StudyNodesController(
+        trackId: 'track-001',
+        repository: InMemoryStudyNodeRepository(
+          nodes: const [
+            StudyNode(
+              id: 'node-status',
+              trackId: 'track-001',
+              parentId: null,
+              title: 'Revisar redes',
+              description: '',
+              sortOrder: 0,
+            ),
+          ],
+        ),
+      );
+
+      await controller.load();
+      await controller.setStatus('node-status', StudyNodeStatus.review);
+
+      final node = controller.state.nodes.single;
+      expect(node.status, StudyNodeStatus.review);
+      expect(node.isCompleted, isFalse);
+    },
+  );
 
   test('edita, move entre irmãos e exclui uma árvore de tópicos', () async {
     final repository = InMemoryStudyNodeRepository(
@@ -139,5 +200,91 @@ void main() {
     await controller.deleteNode('root-001');
     expect(controller.state.nodes, hasLength(1));
     expect(controller.state.nodes.single.id, 'root-002');
+  });
+
+  test('exclui o tópico e promove os subtópicos quando solicitado', () async {
+    final repository = InMemoryStudyNodeRepository(
+      nodes: const [
+        StudyNode(
+          id: 'root-001',
+          trackId: 'track-001',
+          parentId: null,
+          title: 'Redes',
+          description: '',
+          sortOrder: 0,
+        ),
+        StudyNode(
+          id: 'node-001',
+          trackId: 'track-001',
+          parentId: 'root-001',
+          title: 'Camada de transporte',
+          description: '',
+          sortOrder: 0,
+        ),
+        StudyNode(
+          id: 'node-002',
+          trackId: 'track-001',
+          parentId: 'node-001',
+          title: 'TCP',
+          description: '',
+          sortOrder: 0,
+        ),
+      ],
+    );
+    final controller = StudyNodesController(
+      trackId: 'track-001',
+      repository: repository,
+    );
+
+    await controller.load();
+    await controller.deleteNode('node-001', preserveChildren: true);
+
+    expect(
+      controller.state.nodes.map((node) => node.id),
+      containsAll(<String>['root-001', 'node-002']),
+    );
+    expect(
+      controller.state.nodes.any((node) => node.id == 'node-001'),
+      isFalse,
+    );
+    expect(
+      controller.state.nodes
+          .firstWhere((node) => node.id == 'node-002')
+          .parentId,
+      'root-001',
+    );
+  });
+
+  test('promove filhos para a raiz quando o tópico raiz é removido', () async {
+    final repository = InMemoryStudyNodeRepository(
+      nodes: const [
+        StudyNode(
+          id: 'root-001',
+          trackId: 'track-001',
+          parentId: null,
+          title: 'Redes',
+          description: '',
+          sortOrder: 0,
+        ),
+        StudyNode(
+          id: 'node-001',
+          trackId: 'track-001',
+          parentId: 'root-001',
+          title: 'TCP',
+          description: '',
+          sortOrder: 0,
+        ),
+      ],
+    );
+    final controller = StudyNodesController(
+      trackId: 'track-001',
+      repository: repository,
+    );
+
+    await controller.load();
+    await controller.deleteNode('root-001', preserveChildren: true);
+
+    expect(controller.state.nodes.single.id, 'node-001');
+    expect(controller.state.nodes.single.parentId, isNull);
   });
 }

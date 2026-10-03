@@ -120,7 +120,27 @@ class StudyNodesController extends ChangeNotifier {
     await load();
   }
 
-  Future<void> deleteNode(String id) async {
+  Future<void> deleteNode(String id, {bool preserveChildren = false}) async {
+    if (preserveChildren) {
+      final current = state.nodes.firstWhere((node) => node.id == id);
+      final children = state.nodes
+          .where((node) => node.parentId == id)
+          .toList(growable: false);
+      final now = DateTime.now().toUtc();
+
+      // Move os filhos diretos antes de excluir o pai. Isso é necessário no
+      // SQLite porque a relação pai-filho usa ON DELETE CASCADE.
+      for (final child in children) {
+        await repository.update(
+          child.copyWith(
+            parentId: current.parentId,
+            replaceParentId: true,
+            updatedAt: now,
+          ),
+        );
+      }
+    }
+
     await repository.delete(id);
     await load();
   }
@@ -133,13 +153,51 @@ class StudyNodesController extends ChangeNotifier {
   Future<void> setCompletion(String id, bool isCompleted) async {
     final current = state.nodes.firstWhere((node) => node.id == id);
     if (current.isCompleted == isCompleted) return;
-    await repository.update(
-      current.copyWith(
-        isCompleted: isCompleted,
-        updatedAt: DateTime.now().toUtc(),
-      ),
+    final updated = current.copyWith(
+      isCompleted: isCompleted,
+      status: isCompleted ? StudyNodeStatus.completed : StudyNodeStatus.todo,
+      updatedAt: DateTime.now().toUtc(),
     );
-    await load();
+    await _persistNodeUpdate(updated);
+  }
+
+  Future<void> setStatus(String id, StudyNodeStatus status) async {
+    final current = state.nodes.firstWhere((node) => node.id == id);
+    final completed = status == StudyNodeStatus.completed;
+    if (current.status == status && current.isCompleted == completed) return;
+    final updated = current.copyWith(
+      status: status,
+      isCompleted: completed,
+      updatedAt: DateTime.now().toUtc(),
+    );
+    await _persistNodeUpdate(updated);
+  }
+
+  Future<void> _persistNodeUpdate(StudyNode updated) async {
+    final previousState = _state;
+    final nodes = _state.nodes
+        .map((node) => node.id == updated.id ? updated : node)
+        .toList(growable: false);
+
+    // Atualiza a árvore imediatamente e mantém o estado `data`. Recarregar
+    // com `load()` aqui emitia `loading` entre dois frames, fazendo a lista
+    // desaparecer por um instante e causando a piscada ao marcar o checkbox.
+    _state = _state.copyWith(
+      status: nodes.isEmpty ? StudyNodesStatus.empty : StudyNodesStatus.data,
+      nodes: nodes,
+      errorMessage: null,
+    );
+    notifyListeners();
+
+    try {
+      await repository.update(updated);
+    } catch (_) {
+      // Se a persistência falhar, devolve o estado anterior em vez de deixar
+      // a interface otimista diferente do banco local.
+      _state = previousState;
+      notifyListeners();
+      rethrow;
+    }
   }
 
   Future<void> moveNode(String id, {required int direction}) async {
