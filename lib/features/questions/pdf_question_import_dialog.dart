@@ -3,6 +3,8 @@ import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
+import '../../app/dunots_theme.dart';
+import '../../shared/widgets/dunots_modal.dart';
 import 'domain/question.dart';
 import 'domain/quiz_exam.dart';
 import 'pdf_import_service.dart';
@@ -85,142 +87,130 @@ class _PdfQuestionImportDialogState extends State<PdfQuestionImportDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Importar prova e gabarito em PDF'),
-      content: SizedBox(
-        width: 820,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text(
-                'A leitura é feita no dispositivo. O PDF da prova e o gabarito são associados pelo número da questão.',
-              ),
-              const SizedBox(height: 14),
-              _FilePickerTile(
-                label: 'PDF da prova *',
-                file: proofFile,
-                icon: Icons.picture_as_pdf_outlined,
-                onPressed: loading ? null : () => _pickFile(false),
-              ),
-              const SizedBox(height: 8),
-              _FilePickerTile(
-                label: 'PDF do gabarito *',
-                file: answerKeyFile,
-                icon: Icons.fact_check_outlined,
-                onPressed: loading ? null : () => _pickFile(true),
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                initialValue: selectedExamId,
+    final previewHeight = (MediaQuery.sizeOf(context).height * 0.38)
+        .clamp(160.0, 280.0)
+        .toDouble();
+    return DunotsModal(
+      title: 'Importar prova e gabarito',
+      subtitle: 'Associe os PDFs a uma prova antes de importar as questões.',
+      icon: Icons.picture_as_pdf_outlined,
+      // ignore: sort_child_properties_last
+      child: DunotsFormColumn(
+        children: [
+          const Text(
+            'A leitura é feita no dispositivo. O PDF da prova e o gabarito são associados pelo número da questão.',
+          ),
+          const SizedBox(height: 14),
+          _FilePickerTile(
+            label: 'PDF da prova *',
+            file: proofFile,
+            icon: Icons.picture_as_pdf_outlined,
+            onPressed: loading ? null : () => _pickFile(false),
+          ),
+          const SizedBox(height: 8),
+          _FilePickerTile(
+            label: 'PDF do gabarito *',
+            file: answerKeyFile,
+            icon: Icons.fact_check_outlined,
+            onPressed: loading ? null : () => _pickFile(true),
+          ),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<String>(
+            initialValue: selectedExamId,
+            decoration: const InputDecoration(
+              labelText: 'Prova/vaga *',
+              helperText: 'A importação sempre fica ligada a um agrupador.',
+            ),
+            items: widget.exams
+                .map(
+                  (exam) => DropdownMenuItem<String>(
+                    value: exam.id,
+                    child: Text(
+                      '${exam.title}${exam.proofVersion == null ? '' : ' · ${exam.proofVersion}'}',
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                )
+                .toList(),
+            onChanged: loading
+                ? null
+                : (value) => setState(() => selectedExamId = value),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: subjectController,
+            decoration: const InputDecoration(
+              labelText: 'Disciplina/assunto *',
+            ),
+            onChanged: (_) => setState(() {}),
+          ),
+          TextField(
+            controller: topicController,
+            decoration: const InputDecoration(labelText: 'Tópico *'),
+            onChanged: (_) => setState(() {}),
+          ),
+          const SizedBox(height: 14),
+          OutlinedButton.icon(
+            onPressed: canAnalyze ? _analyze : null,
+            icon: loading
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.manage_search),
+            label: Text(loading ? 'Analisando PDFs...' : 'Analisar PDFs'),
+          ),
+          if (error != null) ...[
+            const SizedBox(height: 10),
+            _MessageBox(
+              message: error!,
+              color: Theme.of(context).colorScheme.errorContainer,
+              icon: Icons.error_outline,
+            ),
+          ],
+          if (extraction != null) ...[
+            const SizedBox(height: 16),
+            _AnalysisSummary(
+              extraction: extraction!,
+              parseResult: parseResult,
+              selectedVariant: selectedVariant,
+            ),
+            if (variants.length > 1) ...[
+              const SizedBox(height: 10),
+              DropdownButtonFormField<String?>(
+                initialValue: selectedVersion,
                 decoration: const InputDecoration(
-                  labelText: 'Prova/vaga *',
-                  helperText: 'A importação sempre fica ligada a um agrupador.',
+                  labelText: 'Versão do gabarito',
+                  helperText: 'Selecione a mesma versão identificada na prova.',
                 ),
-                items: widget.exams
+                items: variants
                     .map(
-                      (exam) => DropdownMenuItem<String>(
-                        value: exam.id,
-                        child: Text(
-                          '${exam.title}${exam.proofVersion == null ? '' : ' · ${exam.proofVersion}'}',
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                      (variant) => DropdownMenuItem<String?>(
+                        value: variant.version,
+                        child: Text(variant.label),
                       ),
                     )
                     .toList(),
-                onChanged: loading
-                    ? null
-                    : (value) => setState(() => selectedExamId = value),
+                onChanged: (value) => setState(() => selectedVersion = value),
               ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: subjectController,
-                      decoration: const InputDecoration(
-                        labelText: 'Disciplina/assunto *',
-                      ),
-                      onChanged: (_) => setState(() {}),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: TextField(
-                      controller: topicController,
-                      decoration: const InputDecoration(labelText: 'Tópico *'),
-                      onChanged: (_) => setState(() {}),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 14),
-              OutlinedButton.icon(
-                onPressed: canAnalyze ? _analyze : null,
-                icon: loading
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.manage_search),
-                label: Text(loading ? 'Analisando PDFs...' : 'Analisar PDFs'),
-              ),
-              if (error != null) ...[
-                const SizedBox(height: 10),
-                _MessageBox(
-                  message: error!,
-                  color: Theme.of(context).colorScheme.errorContainer,
-                  icon: Icons.error_outline,
-                ),
-              ],
-              if (extraction != null) ...[
-                const SizedBox(height: 16),
-                _AnalysisSummary(
-                  extraction: extraction!,
-                  parseResult: parseResult,
-                  selectedVariant: selectedVariant,
-                ),
-                if (variants.length > 1) ...[
-                  const SizedBox(height: 10),
-                  DropdownButtonFormField<String?>(
-                    initialValue: selectedVersion,
-                    decoration: const InputDecoration(
-                      labelText: 'Versão do gabarito',
-                      helperText:
-                          'Selecione a mesma versão identificada na prova.',
-                    ),
-                    items: variants
-                        .map(
-                          (variant) => DropdownMenuItem<String?>(
-                            value: variant.version,
-                            child: Text(variant.label),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (value) =>
-                        setState(() => selectedVersion = value),
-                  ),
-                ],
-                const SizedBox(height: 10),
-                SizedBox(
-                  height: 280,
-                  child: ListView.separated(
-                    itemCount: parseResult.questions.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: 8),
-                    itemBuilder: (_, index) => _PdfQuestionPreview(
-                      question: parseResult.questions[index],
-                      answer: _answerFor(parseResult.questions[index]),
-                    ),
-                  ),
-                ),
-              ],
-              const SizedBox(height: 12),
-              const _PdfDisclaimer(),
             ],
-          ),
-        ),
+            const SizedBox(height: 10),
+            SizedBox(
+              height: previewHeight,
+              child: ListView.separated(
+                itemCount: parseResult.questions.length,
+                separatorBuilder: (_, _) => const SizedBox(height: 8),
+                itemBuilder: (_, index) => _PdfQuestionPreview(
+                  question: parseResult.questions[index],
+                  answer: _answerFor(parseResult.questions[index]),
+                ),
+              ),
+            ),
+          ],
+          const SizedBox(height: 12),
+          const _PdfDisclaimer(),
+        ],
       ),
       actions: [
         TextButton(
@@ -435,7 +425,7 @@ class _AnalysisSummary extends StatelessWidget {
     }).length;
     return _MessageBox(
       icon: Icons.check_circle_outline,
-      color: const Color(0xFF292D2A),
+      color: DunotsColors.panel,
       message:
           '${extraction.pageCount} página(s) lida(s) · ${parseResult.questions.length} questão(ões) encontrada(s) · $ready pronta(s) com gabarito.',
     );
@@ -478,7 +468,7 @@ class _PdfQuestionPreview extends StatelessWidget {
                   : 'Não pronta: ${question.error ?? 'gabarito não encontrado ou incompatível.'}',
               style: TextStyle(
                 color: valid
-                    ? Colors.green
+                    ? DunotsColors.mint
                     : Theme.of(context).colorScheme.error,
                 fontWeight: FontWeight.w700,
               ),
@@ -497,7 +487,7 @@ class _PdfDisclaimer extends StatelessWidget {
   Widget build(BuildContext context) {
     return const Text(
       'Suporta PDFs digitais com questões numeradas, alternativas A–E, tabelas, blocos de código, imagens e duas colunas. Cabeçalhos, rodapés e marcas de página repetidos são removidos. PDFs escaneados ainda precisam de OCR.',
-      style: TextStyle(fontSize: 12, height: 1.45, color: Color(0xFFB6B7AD)),
+      style: TextStyle(fontSize: 12, height: 1.45, color: DunotsColors.muted),
     );
   }
 }

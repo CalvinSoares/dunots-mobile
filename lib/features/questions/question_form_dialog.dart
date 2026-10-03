@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'domain/question.dart';
 import 'domain/quiz_exam.dart';
+import '../../shared/widgets/dunots_modal.dart';
 
 class QuestionFormData {
   final Question question;
@@ -11,11 +12,13 @@ class QuestionFormData {
 
 class QuestionFormDialog extends StatefulWidget {
   final Question? initialQuestion;
+  final String? initialExamId;
   final List<QuizExam> exams;
 
   const QuestionFormDialog({
     super.key,
     this.initialQuestion,
+    this.initialExamId,
     this.exams = const [],
   });
 
@@ -27,11 +30,8 @@ class _QuestionFormDialogState extends State<QuestionFormDialog> {
   late final TextEditingController numberController;
   late final TextEditingController statementController;
   late final TextEditingController explanationController;
-  late final TextEditingController contestController;
-  late final TextEditingController roleController;
   late final TextEditingController topicController;
   late final TextEditingController subjectController;
-  late final TextEditingController examController;
   late final TextEditingController notesController;
   late final TextEditingController sourceController;
   late final TextEditingController sourcePageController;
@@ -51,17 +51,14 @@ class _QuestionFormDialogState extends State<QuestionFormDialog> {
     );
     statementController = TextEditingController(text: question?.statement);
     explanationController = TextEditingController(text: question?.explanation);
-    contestController = TextEditingController(text: question?.contest);
-    roleController = TextEditingController(text: question?.role);
     topicController = TextEditingController(text: question?.topic);
     subjectController = TextEditingController(text: question?.subject);
-    examController = TextEditingController(text: question?.exam);
     notesController = TextEditingController(text: question?.notes);
     sourceController = TextEditingController(text: question?.sourceName);
     sourcePageController = TextEditingController(
       text: question?.sourcePage?.toString() ?? '',
     );
-    selectedExamId = question?.examId;
+    selectedExamId = question?.examId ?? widget.initialExamId;
     final alternatives = question?.alternatives ?? const <String>[];
     alternativeControllers = List.generate(
       5,
@@ -77,11 +74,8 @@ class _QuestionFormDialogState extends State<QuestionFormDialog> {
     numberController.dispose();
     statementController.dispose();
     explanationController.dispose();
-    contestController.dispose();
-    roleController.dispose();
     topicController.dispose();
     subjectController.dispose();
-    examController.dispose();
     notesController.dispose();
     sourceController.dispose();
     sourcePageController.dispose();
@@ -93,41 +87,116 @@ class _QuestionFormDialogState extends State<QuestionFormDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(isEditing ? 'Editar questão' : 'Nova questão'),
-      content: SizedBox(
-        width: 520,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
+    return DunotsModal(
+      title: isEditing ? 'Editar questão' : 'Nova questão',
+      icon: Icons.quiz_outlined,
+      subtitle: 'Organize o enunciado, as alternativas e o gabarito.',
+      // ignore: sort_child_properties_last
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          DropdownButtonFormField<String?>(
+            initialValue: widget.exams.any((exam) => exam.id == selectedExamId)
+                ? selectedExamId
+                : null,
+            decoration: const InputDecoration(
+              labelText: 'Prova/vaga',
+              helperText: 'Crie a prova primeiro ou escolha questão avulsa.',
+            ),
+            items: [
+              const DropdownMenuItem<String?>(
+                value: null,
+                child: Text('Questão avulsa'),
+              ),
+              ...widget.exams.map(
+                (exam) => DropdownMenuItem<String?>(
+                  value: exam.id,
+                  child: Text(
+                    _examLabel(exam),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ),
+            ],
+            onChanged: (value) => setState(() => selectedExamId = value),
+          ),
+          if (_selectedExamSummary?.isNotEmpty == true) ...[
+            const SizedBox(height: 4),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                _selectedExamSummary ?? '',
+                style: const TextStyle(fontSize: 12),
+              ),
+            ),
+          ],
+          const SizedBox(height: 12),
+          Row(
             children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: numberController,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: 'Número',
-                        hintText: 'Ex.: 42',
-                      ),
-                    ),
+              Expanded(
+                child: TextField(
+                  controller: numberController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Número',
+                    hintText: 'Ex.: 42',
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: TextField(
-                      controller: roleController,
-                      decoration: const InputDecoration(labelText: 'Cargo'),
-                    ),
-                  ),
-                ],
+                ),
               ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: contestController,
-                decoration: const InputDecoration(labelText: 'Concurso'),
+            ],
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: statementController,
+            maxLines: 5,
+            decoration: const InputDecoration(
+              labelText: 'Enunciado *',
+              alignLabelWithHint: true,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'Alternativas A–E',
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
+          ),
+          const SizedBox(height: 8),
+          ...alternativeControllers.asMap().entries.map((entry) {
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: TextField(
+                controller: entry.value,
+                maxLines: 2,
+                decoration: InputDecoration(
+                  labelText: '${String.fromCharCode(65 + entry.key)} *',
+                ),
               ),
-              const SizedBox(height: 12),
+            );
+          }),
+          DropdownButtonFormField<int>(
+            initialValue: correctAlternativeIndex,
+            decoration: const InputDecoration(labelText: 'Gabarito *'),
+            items: List.generate(
+              5,
+              (index) => DropdownMenuItem(
+                value: index,
+                child: Text(String.fromCharCode(65 + index)),
+              ),
+            ),
+            onChanged: (value) {
+              if (value != null) {
+                setState(() => correctAlternativeIndex = value);
+              }
+            },
+          ),
+          const SizedBox(height: 12),
+          ExpansionTile(
+            tilePadding: EdgeInsets.zero,
+            title: const Text('Detalhes opcionais'),
+            subtitle: const Text('Tópico, assunto, explicação e fonte'),
+            children: [
               TextField(
                 controller: topicController,
                 decoration: const InputDecoration(
@@ -142,88 +211,6 @@ class _QuestionFormDialogState extends State<QuestionFormDialog> {
                   labelText: 'Disciplina/assunto',
                   hintText: 'Ex.: Redes de Computadores',
                 ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: examController,
-                decoration: const InputDecoration(
-                  labelText: 'Prova/versão',
-                  hintText: 'Ex.: Prova 6, versão A',
-                ),
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String?>(
-                initialValue:
-                    widget.exams.any((exam) => exam.id == selectedExamId)
-                    ? selectedExamId
-                    : null,
-                decoration: const InputDecoration(
-                  labelText: 'Vínculo com prova/vaga *',
-                  helperText:
-                      'Escolha uma prova ou deixe explícito como avulsa.',
-                ),
-                items: [
-                  const DropdownMenuItem<String?>(
-                    value: null,
-                    child: Text('Questão avulsa (sem prova)'),
-                  ),
-                  ...widget.exams.map(
-                    (exam) => DropdownMenuItem<String?>(
-                      value: exam.id,
-                      child: Text(
-                        '${exam.title}${exam.proofVersion == null ? '' : ' · ${exam.proofVersion}'}',
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ),
-                ],
-                onChanged: (value) => setState(() => selectedExamId = value),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: statementController,
-                maxLines: 5,
-                decoration: const InputDecoration(
-                  labelText: 'Enunciado *',
-                  alignLabelWithHint: true,
-                ),
-              ),
-              const SizedBox(height: 16),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'Alternativas A–E',
-                  style: Theme.of(context).textTheme.titleSmall,
-                ),
-              ),
-              const SizedBox(height: 8),
-              ...alternativeControllers.asMap().entries.map((entry) {
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: TextField(
-                    controller: entry.value,
-                    maxLines: 2,
-                    decoration: InputDecoration(
-                      labelText: '${String.fromCharCode(65 + entry.key)} *',
-                    ),
-                  ),
-                );
-              }),
-              DropdownButtonFormField<int>(
-                initialValue: correctAlternativeIndex,
-                decoration: const InputDecoration(labelText: 'Gabarito *'),
-                items: List.generate(
-                  5,
-                  (index) => DropdownMenuItem(
-                    value: index,
-                    child: Text(String.fromCharCode(65 + index)),
-                  ),
-                ),
-                onChanged: (value) {
-                  if (value != null) {
-                    setState(() => correctAlternativeIndex = value);
-                  }
-                },
               ),
               const SizedBox(height: 12),
               TextField(
@@ -244,40 +231,29 @@ class _QuestionFormDialogState extends State<QuestionFormDialog> {
                 ),
               ),
               const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: sourceController,
-                      decoration: const InputDecoration(labelText: 'Fonte'),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  SizedBox(
-                    width: 130,
-                    child: TextField(
-                      controller: sourcePageController,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(labelText: 'Página'),
-                    ),
-                  ),
-                ],
+              TextField(
+                controller: sourceController,
+                decoration: const InputDecoration(labelText: 'Fonte'),
               ),
-              if (validationError != null) ...[
-                const SizedBox(height: 12),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    validationError!,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
-                    ),
-                  ),
-                ),
-              ],
+              const SizedBox(height: 12),
+              TextField(
+                controller: sourcePageController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'Página da fonte'),
+              ),
             ],
           ),
-        ),
+          if (validationError != null) ...[
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                validationError!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            ),
+          ],
+        ],
       ),
       actions: [
         TextButton(
@@ -322,6 +298,7 @@ class _QuestionFormDialogState extends State<QuestionFormDialog> {
     }
 
     final current = widget.initialQuestion;
+    final exam = _selectedExam;
     Navigator.of(context).pop(
       QuestionFormData(
         Question(
@@ -333,10 +310,10 @@ class _QuestionFormDialogState extends State<QuestionFormDialog> {
           alternatives: alternatives,
           correctAlternativeIndex: correctAlternativeIndex,
           explanation: explanationController.text.trim(),
-          contest: contestController.text.trim(),
-          role: roleController.text.trim(),
+          contest: exam?.contestName ?? current?.contest ?? '',
+          role: exam?.vacancy ?? current?.role ?? '',
           topic: topicController.text.trim(),
-          exam: examController.text.trim(),
+          exam: exam?.title ?? current?.exam ?? '',
           examId: selectedExamId,
           subject: subjectController.text.trim(),
           notes: notesController.text.trim(),
@@ -352,5 +329,30 @@ class _QuestionFormDialogState extends State<QuestionFormDialog> {
   String? _optional(String value) {
     final normalized = value.trim();
     return normalized.isEmpty ? null : normalized;
+  }
+
+  QuizExam? get _selectedExam {
+    for (final exam in widget.exams) {
+      if (exam.id == selectedExamId) return exam;
+    }
+    return null;
+  }
+
+  String? get _selectedExamSummary {
+    final exam = _selectedExam;
+    if (exam == null) return null;
+    return [
+      if (exam.contestName.isNotEmpty) exam.contestName,
+      if (exam.vacancy.isNotEmpty) exam.vacancy,
+      if (exam.proofVersion?.isNotEmpty == true) exam.proofVersion!,
+      if (exam.year != null) '${exam.year}',
+    ].join(' · ');
+  }
+
+  String _examLabel(QuizExam exam) {
+    final version = exam.proofVersion?.trim();
+    return version == null || version.isEmpty
+        ? exam.title
+        : '${exam.title} · $version';
   }
 }

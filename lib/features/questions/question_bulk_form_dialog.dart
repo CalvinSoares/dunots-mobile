@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
+import '../../app/dunots_theme.dart';
 import 'domain/question.dart';
 import 'domain/quiz_exam.dart';
 import 'question_bulk_parser.dart';
+import '../../shared/widgets/dunots_modal.dart';
 
 class QuestionBulkFormData {
   final List<Question> questions;
@@ -56,144 +58,160 @@ class _QuestionBulkFormDialogState extends State<QuestionBulkFormDialog> {
   @override
   Widget build(BuildContext context) {
     final selected = selectedExam;
-    return AlertDialog(
-      title: const Text('Cadastro rápido em massa'),
-      content: SizedBox(
-        width: 780,
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            mainAxisSize: MainAxisSize.min,
+    final compact = MediaQuery.sizeOf(context).width < 520;
+    final previewHeight = (MediaQuery.sizeOf(context).height * 0.4)
+        .clamp(180.0, 300.0)
+        .toDouble();
+    return DunotsModal(
+      title: 'Cadastro rápido em massa',
+      icon: Icons.playlist_add,
+      subtitle: 'Cole, revise a prévia e salve várias questões de uma vez.',
+      // ignore: sort_child_properties_last
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text(
+            'Cole as questões no formato indicado. O preview é atualizado antes de qualquer gravação.',
+          ),
+          const SizedBox(height: 14),
+          DropdownButtonFormField<String?>(
+            initialValue: selectedExamId,
+            decoration: const InputDecoration(
+              labelText: 'Prova/vaga',
+              helperText: 'Pode deixar explícito como questão avulsa.',
+            ),
+            items: [
+              const DropdownMenuItem<String?>(
+                value: null,
+                child: Text('Questões avulsas (sem prova)'),
+              ),
+              ...widget.exams.map(
+                (exam) => DropdownMenuItem<String?>(
+                  value: exam.id,
+                  child: Text(
+                    '${exam.title}${exam.proofVersion == null ? '' : ' · ${exam.proofVersion}'}',
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ),
+            ],
+            onChanged: (value) => setState(() => selectedExamId = value),
+          ),
+          const SizedBox(height: 12),
+          if (compact) ...[
+            TextField(
+              controller: subjectController,
+              decoration: const InputDecoration(
+                labelText: 'Disciplina/assunto *',
+              ),
+              onChanged: (_) => setState(() {}),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: topicController,
+              decoration: const InputDecoration(labelText: 'Tópico'),
+            ),
+          ] else
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: subjectController,
+                    decoration: const InputDecoration(
+                      labelText: 'Disciplina/assunto *',
+                    ),
+                    onChanged: (_) => setState(() {}),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TextField(
+                    controller: topicController,
+                    decoration: const InputDecoration(labelText: 'Tópico'),
+                  ),
+                ),
+              ],
+            ),
+          const SizedBox(height: 14),
+          TextField(
+            controller: inputController,
+            minLines: 10,
+            maxLines: 18,
+            onChanged: (value) {
+              setState(() => parseResult = parseBulkQuestions(value));
+            },
+            decoration: const InputDecoration(
+              labelText: 'Questões *',
+              hintText: 'Cole aqui o texto das questões...',
+              alignLabelWithHint: true,
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 10),
+          _FormatDisclaimer(),
+          const SizedBox(height: 16),
+          Row(
             children: [
-              const Text(
-                'Cole as questões no formato indicado. O preview é atualizado antes de qualquer gravação.',
+              Text(
+                'Prévia reconhecida',
+                style: Theme.of(context).textTheme.titleMedium,
               ),
-              const SizedBox(height: 14),
-              DropdownButtonFormField<String?>(
-                initialValue: selectedExamId,
-                decoration: const InputDecoration(
-                  labelText: 'Prova/vaga',
-                  helperText: 'Pode deixar explícito como questão avulsa.',
-                ),
-                items: [
-                  const DropdownMenuItem<String?>(
-                    value: null,
-                    child: Text('Questões avulsas (sem prova)'),
-                  ),
-                  ...widget.exams.map(
-                    (exam) => DropdownMenuItem<String?>(
-                      value: exam.id,
-                      child: Text(
-                        '${exam.title}${exam.proofVersion == null ? '' : ' · ${exam.proofVersion}'}',
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ),
-                ],
-                onChanged: (value) => setState(() => selectedExamId = value),
+              const Spacer(),
+              Text(
+                '${parseResult.questions.length} questão(ões)',
+                style: const TextStyle(color: DunotsColors.muted),
               ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: subjectController,
-                      decoration: const InputDecoration(
-                        labelText: 'Disciplina/assunto *',
-                      ),
-                      onChanged: (_) => setState(() {}),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: TextField(
-                      controller: topicController,
-                      decoration: const InputDecoration(labelText: 'Tópico'),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 14),
-              TextField(
-                controller: inputController,
-                minLines: 10,
-                maxLines: 18,
-                onChanged: (value) {
-                  setState(() => parseResult = parseBulkQuestions(value));
-                },
-                decoration: const InputDecoration(
-                  labelText: 'Questões *',
-                  hintText: 'Cole aqui o texto das questões...',
-                  alignLabelWithHint: true,
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 10),
-              _FormatDisclaimer(),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Text(
-                    'Prévia reconhecida',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  const Spacer(),
-                  Text(
-                    '${parseResult.questions.length} questão(ões)',
-                    style: const TextStyle(color: Color(0xFFB6B7AD)),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              if (parseResult.questions.isEmpty)
-                const _PreviewMessage(
-                  icon: Icons.info_outline,
-                  message: 'Cole um conteúdo para gerar a prévia.',
-                )
-              else
-                SizedBox(
-                  height: 300,
-                  child: ListView.separated(
-                    itemCount: parseResult.questions.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: 8),
-                    itemBuilder: (context, index) {
-                      return _QuestionPreviewCard(
-                        question: parseResult.questions[index],
-                      );
-                    },
-                  ),
-                ),
-              if (parseResult.errors.isNotEmpty) ...[
-                const SizedBox(height: 10),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.errorContainer,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Corrija antes de salvar:',
-                        style: TextStyle(fontWeight: FontWeight.w700),
-                      ),
-                      const SizedBox(height: 4),
-                      ...parseResult.errors.map((error) => Text('• $error')),
-                    ],
-                  ),
-                ),
-              ],
-              if (selected == null && widget.exams.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                const Text(
-                  'Nenhuma prova selecionada: as questões serão salvas como avulsas.',
-                  style: TextStyle(color: Color(0xFFFFC857)),
-                ),
-              ],
             ],
           ),
-        ),
+          const SizedBox(height: 8),
+          if (parseResult.questions.isEmpty)
+            const _PreviewMessage(
+              icon: Icons.info_outline,
+              message: 'Cole um conteúdo para gerar a prévia.',
+            )
+          else
+            SizedBox(
+              height: previewHeight,
+              child: ListView.separated(
+                itemCount: parseResult.questions.length,
+                separatorBuilder: (_, _) => const SizedBox(height: 8),
+                itemBuilder: (context, index) {
+                  return _QuestionPreviewCard(
+                    question: parseResult.questions[index],
+                  );
+                },
+              ),
+            ),
+          if (parseResult.errors.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.errorContainer,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Corrija antes de salvar:',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 4),
+                  ...parseResult.errors.map((error) => Text('• $error')),
+                ],
+              ),
+            ),
+          ],
+          if (selected == null && widget.exams.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            const Text(
+              'Nenhuma prova selecionada: as questões serão salvas como avulsas.',
+              style: TextStyle(color: DunotsColors.amber),
+            ),
+          ],
+        ],
       ),
       actions: [
         TextButton(
@@ -251,8 +269,8 @@ class _FormatDisclaimer extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFF292D2A),
-        border: Border.all(color: const Color(0xFF4A504B)),
+        color: DunotsColors.panel,
+        border: Border.all(color: DunotsColors.border),
         borderRadius: BorderRadius.circular(12),
       ),
       child: const Text(
@@ -306,8 +324,8 @@ class _QuestionPreviewCard extends StatelessWidget {
                           : Icons.radio_button_unchecked,
                       size: 16,
                       color: alternative.markedCorrect
-                          ? Colors.green
-                          : const Color(0xFFB6B7AD),
+                          ? DunotsColors.mint
+                          : DunotsColors.muted,
                     ),
                     const SizedBox(width: 6),
                     Expanded(
@@ -328,7 +346,7 @@ class _QuestionPreviewCard extends StatelessWidget {
               Text(
                 'Gabarito: ${String.fromCharCode(65 + question.correctAlternativeIndex!)}',
                 style: const TextStyle(
-                  color: Colors.green,
+                  color: DunotsColors.mint,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -352,7 +370,7 @@ class _PreviewMessage extends StatelessWidget {
       padding: const EdgeInsets.all(24),
       child: Column(
         children: [
-          Icon(icon, color: const Color(0xFF78B8FF)),
+          Icon(icon, color: DunotsColors.emerald),
           const SizedBox(height: 8),
           Text(message, textAlign: TextAlign.center),
         ],
