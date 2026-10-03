@@ -12,7 +12,7 @@ class AppDatabase {
         path.join(await getDatabasesPath(), 'dunots.db');
     final database = await openDatabase(
       databasePath,
-      version: 28,
+      version: 30,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
       },
@@ -37,6 +37,7 @@ class AppDatabase {
             description TEXT NOT NULL,
             sort_order INTEGER NOT NULL DEFAULT 0,
             is_completed INTEGER NOT NULL DEFAULT 0,
+            status INTEGER NOT NULL DEFAULT 0,
             notes TEXT NOT NULL DEFAULT '',
             priority INTEGER NOT NULL DEFAULT 0,
             created_at TEXT NOT NULL DEFAULT '',
@@ -315,6 +316,19 @@ class AppDatabase {
         if (oldVersion < 28) {
           await _createStudyMaterialProgressTable(database);
         }
+        if (oldVersion < 29) {
+          await _addColumnIfMissing(
+            database,
+            'study_nodes',
+            'status INTEGER NOT NULL DEFAULT 0',
+          );
+          await database.execute(
+            'UPDATE study_nodes SET status = 3 WHERE is_completed = 1',
+          );
+        }
+        if (oldVersion < 30) {
+          await _normalizeLegacyQuizAttempts(database);
+        }
       },
     );
 
@@ -332,6 +346,31 @@ class AppDatabase {
     final columns = await database.rawQuery('PRAGMA table_info($table)');
     if (columns.any((row) => row['name'] == column)) return;
     await database.execute('ALTER TABLE $table ADD COLUMN $definition');
+  }
+
+  static Future<void> _normalizeLegacyQuizAttempts(Database database) async {
+    // O desktop usa `in-progress`/`completed` e `startedAt`, enquanto o
+    // mobile persiste `inProgress`/`finished` e `created_at`. Normalizar as
+    // linhas importadas impede que uma tentativa antiga derrube o mural Hoje.
+    final now = "strftime('%Y-%m-%dT%H:%M:%fZ', 'now')";
+    await database.execute('''
+      UPDATE quiz_attempts
+      SET status = CASE
+        WHEN lower(replace(replace(status, '-', ''), '_', '')) IN ('completed', 'finished')
+          THEN 'finished'
+        ELSE 'inProgress'
+      END
+    ''');
+    await database.execute('''
+      UPDATE quiz_attempts
+      SET created_at = COALESCE(NULLIF(created_at, ''), NULLIF(updated_at, ''), $now)
+      WHERE created_at = ''
+    ''');
+    await database.execute('''
+      UPDATE quiz_attempts
+      SET updated_at = COALESCE(NULLIF(updated_at, ''), NULLIF(created_at, ''), $now)
+      WHERE updated_at = ''
+    ''');
   }
 
   static Future<void> _createMaterialLinksTable(Database database) async {

@@ -7,7 +7,6 @@ class Flashcard {
   final String? quizQuestionId;
   final List<String> tags;
   final List<String> linkedMaterialIds;
-  final List<String> diagramIds;
   final DateTime createdAt;
   final DateTime? dueAt;
   final DateTime? lastReviewedAt;
@@ -27,7 +26,6 @@ class Flashcard {
     this.quizQuestionId,
     this.tags = const [],
     this.linkedMaterialIds = const [],
-    this.diagramIds = const [],
     required this.createdAt,
     this.dueAt,
     this.lastReviewedAt,
@@ -48,7 +46,6 @@ class Flashcard {
     String? quizQuestionId,
     List<String>? tags,
     List<String>? linkedMaterialIds,
-    List<String>? diagramIds,
     DateTime? createdAt,
     DateTime? dueAt,
     DateTime? lastReviewedAt,
@@ -68,7 +65,6 @@ class Flashcard {
       quizQuestionId: quizQuestionId ?? this.quizQuestionId,
       tags: tags ?? this.tags,
       linkedMaterialIds: linkedMaterialIds ?? this.linkedMaterialIds,
-      diagramIds: diagramIds ?? this.diagramIds,
       createdAt: createdAt ?? this.createdAt,
       dueAt: dueAt ?? this.dueAt,
       lastReviewedAt: lastReviewedAt ?? this.lastReviewedAt,
