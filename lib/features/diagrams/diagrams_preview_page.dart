@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../shared/widgets/dunots_modal.dart';
 import '../../shared/widgets/study_widgets.dart';
 import 'data/diagram_repository.dart';
 import 'diagram_painter.dart';
@@ -71,55 +72,78 @@ class _DiagramsPreviewPageState extends State<DiagramsPreviewPage> {
             );
           }
           final selected = _selected ?? diagrams.first;
-          return Column(
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: DropdownButtonFormField<StudyDiagram>(
-                      initialValue: diagrams.contains(selected)
-                          ? selected
-                          : diagrams.first,
-                      decoration: const InputDecoration(
-                        labelText: 'Fluxograma',
+          return LayoutBuilder(
+            builder: (context, constraints) {
+              final compact = constraints.maxWidth < 520;
+              final selector = DropdownButtonFormField<StudyDiagram>(
+                initialValue: diagrams.contains(selected)
+                    ? selected
+                    : diagrams.first,
+                decoration: const InputDecoration(labelText: 'Fluxograma'),
+                items: diagrams
+                    .map(
+                      (item) => DropdownMenuItem(
+                        value: item,
+                        child: Text(
+                          item.title,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
-                      items: diagrams
-                          .map(
-                            (item) => DropdownMenuItem(
-                              value: item,
-                              child: Text(item.title),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (value) => setState(() => _selected = value),
+                    )
+                    .toList(),
+                onChanged: (value) => setState(() => _selected = value),
+              );
+              final actions = compact
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        FilledButton.icon(
+                          onPressed: _create,
+                          icon: const Icon(Icons.add),
+                          label: const Text('Novo fluxograma'),
+                        ),
+                        const SizedBox(height: 8),
+                        OutlinedButton.icon(
+                          onPressed: () => _edit(selected),
+                          icon: const Icon(Icons.edit_outlined),
+                          label: const Text('Editar fluxograma'),
+                        ),
+                      ],
+                    )
+                  : Row(
+                      children: [
+                        FilledButton.icon(
+                          onPressed: _create,
+                          icon: const Icon(Icons.add),
+                          label: const Text('Novo'),
+                        ),
+                        const SizedBox(width: 8),
+                        OutlinedButton.icon(
+                          onPressed: () => _edit(selected),
+                          icon: const Icon(Icons.edit_outlined),
+                          label: const Text('Editar'),
+                        ),
+                      ],
+                    );
+              return Column(
+                children: [
+                  selector,
+                  const SizedBox(height: 12),
+                  Align(alignment: Alignment.centerLeft, child: actions),
+                  const SizedBox(height: 16),
+                  _DiagramCanvas(diagram: selected),
+                  const SizedBox(height: 12),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      '${selected.nodes.length} blocos · ${selected.edges.length} ligações · '
+                      '${selected.flashcardIds.length} flashcards · ${selected.problemIds.length} desafios',
+                      style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  FilledButton.icon(
-                    onPressed: _create,
-                    icon: const Icon(Icons.add),
-                    label: const Text('Novo'),
-                  ),
-                  const SizedBox(width: 8),
-                  OutlinedButton.icon(
-                    onPressed: () => _edit(selected),
-                    icon: const Icon(Icons.edit_outlined),
-                    label: const Text('Editar'),
-                  ),
                 ],
-              ),
-              const SizedBox(height: 16),
-              _DiagramCanvas(diagram: selected),
-              const SizedBox(height: 12),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  '${selected.nodes.length} blocos · ${selected.edges.length} ligações · '
-                  '${selected.flashcardIds.length} flashcards · ${selected.problemIds.length} desafios',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ),
-            ],
+              );
+            },
           );
         },
       ),
@@ -127,7 +151,7 @@ class _DiagramsPreviewPageState extends State<DiagramsPreviewPage> {
   }
 
   Future<void> _create() async {
-    final data = await showDialog<_DiagramFormData>(
+    final data = await showDunotsDrawer<_DiagramFormData>(
       context: context,
       builder: (_) => const _DiagramFormDialog(),
     );
@@ -228,40 +252,44 @@ class _DiagramFormDialogState extends State<_DiagramFormDialog> {
   }
 
   @override
-  Widget build(BuildContext context) => AlertDialog(
-    title: const Text('Novo fluxograma'),
-    content: Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        TextField(
-          controller: _title,
-          decoration: const InputDecoration(labelText: 'Título *'),
+  Widget build(BuildContext context) {
+    return DunotsModal(
+      title: 'Novo fluxograma',
+      subtitle: 'Dê um nome ao mapa antes de adicionar os blocos.',
+      icon: Icons.account_tree_outlined,
+      // ignore: sort_child_properties_last
+      child: DunotsFormColumn(
+        children: [
+          TextField(
+            controller: _title,
+            decoration: const InputDecoration(labelText: 'Título *'),
+          ),
+          TextField(
+            controller: _description,
+            decoration: const InputDecoration(labelText: 'Descrição'),
+            maxLines: 3,
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancelar'),
         ),
-        TextField(
-          controller: _description,
-          decoration: const InputDecoration(labelText: 'Descrição'),
-          maxLines: 3,
+        FilledButton(
+          onPressed: () {
+            if (_title.text.trim().isEmpty) return;
+            Navigator.pop(
+              context,
+              _DiagramFormData(
+                title: _title.text.trim(),
+                description: _description.text.trim(),
+              ),
+            );
+          },
+          child: const Text('Criar'),
         ),
       ],
-    ),
-    actions: [
-      TextButton(
-        onPressed: () => Navigator.pop(context),
-        child: const Text('Cancelar'),
-      ),
-      FilledButton(
-        onPressed: () {
-          if (_title.text.trim().isEmpty) return;
-          Navigator.pop(
-            context,
-            _DiagramFormData(
-              title: _title.text.trim(),
-              description: _description.text.trim(),
-            ),
-          );
-        },
-        child: const Text('Criar'),
-      ),
-    ],
-  );
+    );
+  }
 }

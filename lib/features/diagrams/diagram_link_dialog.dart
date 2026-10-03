@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../shared/widgets/dunots_modal.dart';
 import 'domain/study_diagram.dart';
 
 class DiagramLinkDialog extends StatefulWidget {
@@ -34,46 +35,54 @@ class _DiagramLinkDialogState extends State<DiagramLinkDialog> {
           return query.isEmpty || diagram.title.toLowerCase().contains(query);
         })
         .toList(growable: false);
-    return AlertDialog(
-      title: const Text('Vincular fluxogramas'),
-      content: SizedBox(
-        width: 420,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              decoration: const InputDecoration(
-                prefixIcon: Icon(Icons.search),
-                hintText: 'Buscar fluxogramas...',
-              ),
-              onChanged: (value) => setState(() => _search = value),
+    return DunotsModal(
+      title: 'Vincular fluxogramas',
+      subtitle: 'Selecione os fluxogramas relacionados ao conteúdo.',
+      icon: Icons.account_tree_outlined,
+      scrollable: false,
+      // ignore: sort_child_properties_last
+      child: DunotsFormColumn(
+        spacing: 10,
+        children: [
+          TextField(
+            decoration: const InputDecoration(
+              prefixIcon: Icon(Icons.search),
+              labelText: 'Buscar fluxogramas',
             ),
-            const SizedBox(height: 8),
-            Flexible(
-              child: visible.isEmpty
-                  ? const Center(child: Text('Nenhum fluxograma encontrado.'))
-                  : ListView(
-                      shrinkWrap: true,
-                      children: visible
-                          .map(
-                            (diagram) => CheckboxListTile(
-                              value: _selected.contains(diagram.id),
-                              title: Text(diagram.title),
-                              subtitle: Text('${diagram.nodes.length} blocos'),
-                              onChanged: (checked) => setState(() {
-                                if (checked == true) {
-                                  _selected.add(diagram.id);
-                                } else {
-                                  _selected.remove(diagram.id);
-                                }
-                              }),
-                            ),
-                          )
-                          .toList(),
-                    ),
+            onChanged: (value) => setState(() => _search = value),
+          ),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              '${_selected.length} selecionado(s)',
+              style: const TextStyle(color: Color(0xFFB6B7AD)),
             ),
-          ],
-        ),
+          ),
+          SizedBox(
+            width: double.infinity,
+            height: MediaQuery.sizeOf(context).height * 0.42,
+            child: visible.isEmpty
+                ? const Center(child: Text('Nenhum fluxograma encontrado.'))
+                : ListView(
+                    children: visible
+                        .map(
+                          (diagram) => CheckboxListTile(
+                            value: _selected.contains(diagram.id),
+                            title: Text(diagram.title),
+                            subtitle: Text('${diagram.nodes.length} blocos'),
+                            onChanged: (checked) => setState(() {
+                              if (checked == true) {
+                                _selected.add(diagram.id);
+                              } else {
+                                _selected.remove(diagram.id);
+                              }
+                            }),
+                          ),
+                        )
+                        .toList(),
+                  ),
+          ),
+        ],
       ),
       actions: [
         TextButton(

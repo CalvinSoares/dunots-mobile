@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import 'dart:math' as math;
 
+import '../../shared/widgets/dunots_modal.dart';
 import 'data/diagram_repository.dart';
 import 'domain/study_diagram.dart';
 
@@ -135,30 +136,32 @@ class _DiagramEditorPageState extends State<DiagramEditorPage> {
               const SizedBox(width: 12),
             ],
           ),
-          body: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    'Arraste no espaço vazio para selecionar blocos. Segure e arraste um bloco para mover toda a seleção. Ctrl/Cmd+C, X e V também funcionam.',
-                    style: Theme.of(context).textTheme.bodySmall,
+          body: SafeArea(
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'Arraste no espaço vazio para selecionar blocos. Segure e arraste um bloco para mover toda a seleção. Ctrl/Cmd+C, X e V também funcionam.',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
                   ),
                 ),
-              ),
-              Expanded(child: _buildEditorViewport(context)),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    '${_nodes.length} blocos · ${_edges.length} ligações · ${_selectedIds.length} blocos selecionados · ${_selectedEdgeIndexes.length} conexões selecionadas',
-                    style: Theme.of(context).textTheme.bodySmall,
+                Expanded(child: _buildEditorViewport(context)),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      '${_nodes.length} blocos · ${_edges.length} ligações · ${_selectedIds.length} blocos selecionados · ${_selectedEdgeIndexes.length} conexões selecionadas',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -430,7 +433,7 @@ class _DiagramEditorPageState extends State<DiagramEditorPage> {
   }
 
   Future<void> _createNode() async {
-    final node = await showDialog<Map<String, dynamic>>(
+    final node = await showDunotsDrawer<Map<String, dynamic>>(
       context: context,
       builder: (_) => const _NodeEditorDialog(),
     );
@@ -476,7 +479,7 @@ class _DiagramEditorPageState extends State<DiagramEditorPage> {
   Future<void> _createEdge() async {
     if (_selectedIds.length != 2) return;
     final selected = _selectedIds.toList(growable: false);
-    final edge = await showDialog<Map<String, dynamic>>(
+    final edge = await showDunotsDrawer<Map<String, dynamic>>(
       context: context,
       builder: (_) => _EdgeEditorDialog(
         initial: const {},
@@ -489,7 +492,7 @@ class _DiagramEditorPageState extends State<DiagramEditorPage> {
   }
 
   Future<void> _editNode(Map<String, dynamic> node) async {
-    final updated = await showDialog<Map<String, dynamic>>(
+    final updated = await showDunotsDrawer<Map<String, dynamic>>(
       context: context,
       builder: (_) => _NodeEditorDialog(initial: node),
     );
@@ -506,7 +509,7 @@ class _DiagramEditorPageState extends State<DiagramEditorPage> {
   }
 
   Future<void> _editEdges() async {
-    final result = await showDialog<List<Map<String, dynamic>>>(
+    final result = await showDunotsDrawer<List<Map<String, dynamic>>>(
       context: context,
       builder: (_) =>
           _EdgeListDialog(edges: _edges, onEdit: (index) => _editEdge(index)),
@@ -515,7 +518,7 @@ class _DiagramEditorPageState extends State<DiagramEditorPage> {
   }
 
   Future<Map<String, dynamic>?> _editEdge(int index) async {
-    final updated = await showDialog<Map<String, dynamic>>(
+    final updated = await showDunotsDrawer<Map<String, dynamic>>(
       context: context,
       builder: (_) => _EdgeEditorDialog(
         initial: _edges[index],
@@ -962,54 +965,40 @@ class _NodeEditorDialogState extends State<_NodeEditorDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(widget.initial == null ? 'Novo bloco' : 'Editar bloco'),
-      content: SingleChildScrollView(
-        child: SizedBox(
-          width: 360,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: _labelController,
-                autofocus: true,
-                maxLines: 3,
-                decoration: const InputDecoration(labelText: 'Texto *'),
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                initialValue: _shape,
-                decoration: const InputDecoration(labelText: 'Formato'),
-                items: _shapes
-                    .map(
-                      (shape) =>
-                          DropdownMenuItem(value: shape, child: Text(shape)),
-                    )
-                    .toList(),
-                onChanged: (value) =>
-                    setState(() => _shape = value ?? 'rounded'),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _colorController,
-                decoration: const InputDecoration(
-                  labelText: 'Cor',
-                  hintText: '#334155 ou 0xFF334155',
-                ),
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(child: _numberField(_fontSizeController, 'Fonte')),
-                  const SizedBox(width: 8),
-                  Expanded(child: _numberField(_widthController, 'Largura')),
-                  const SizedBox(width: 8),
-                  Expanded(child: _numberField(_heightController, 'Altura')),
-                ],
-              ),
-            ],
+    return DunotsModal(
+      title: widget.initial == null ? 'Novo bloco' : 'Editar bloco',
+      subtitle: 'Defina o texto e a aparência do bloco.',
+      icon: Icons.crop_square_outlined,
+      // ignore: sort_child_properties_last
+      child: DunotsFormColumn(
+        children: [
+          TextField(
+            controller: _labelController,
+            autofocus: true,
+            maxLines: 3,
+            decoration: const InputDecoration(labelText: 'Texto *'),
           ),
-        ),
+          DropdownButtonFormField<String>(
+            initialValue: _shape,
+            decoration: const InputDecoration(labelText: 'Formato'),
+            items: _shapes
+                .map(
+                  (shape) => DropdownMenuItem(value: shape, child: Text(shape)),
+                )
+                .toList(),
+            onChanged: (value) => setState(() => _shape = value ?? 'rounded'),
+          ),
+          TextField(
+            controller: _colorController,
+            decoration: const InputDecoration(
+              labelText: 'Cor',
+              hintText: '#334155 ou 0xFF334155',
+            ),
+          ),
+          _numberField(_fontSizeController, 'Fonte'),
+          _numberField(_widthController, 'Largura'),
+          _numberField(_heightController, 'Altura'),
+        ],
       ),
       actions: [
         TextButton(
@@ -1097,65 +1086,42 @@ class _EdgeEditorDialogState extends State<_EdgeEditorDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Editar conexão'),
-      content: SizedBox(
-        width: 360,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Text('${widget.source} → ${widget.target}'),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _labelController,
-              decoration: const InputDecoration(labelText: 'Rótulo'),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _colorController,
-              decoration: const InputDecoration(labelText: 'Cor'),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _widthController,
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
-                    decoration: const InputDecoration(labelText: 'Espessura'),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: DropdownButtonFormField<String>(
-                    initialValue: _style,
-                    decoration: const InputDecoration(labelText: 'Estilo'),
-                    items: const [
-                      DropdownMenuItem(value: 'solid', child: Text('Sólida')),
-                      DropdownMenuItem(
-                        value: 'dashed',
-                        child: Text('Tracejada'),
-                      ),
-                    ],
-                    onChanged: (value) =>
-                        setState(() => _style = value ?? 'solid'),
-                  ),
-                ),
-              ],
-            ),
-            CheckboxListTile(
-              contentPadding: EdgeInsets.zero,
-              value: _arrow,
-              onChanged: (value) => setState(() => _arrow = value ?? true),
-              title: const Text('Exibir seta'),
-            ),
-          ],
-        ),
+    return DunotsModal(
+      title: 'Editar conexão',
+      subtitle: '${widget.source} → ${widget.target}',
+      icon: Icons.link_outlined,
+      // ignore: sort_child_properties_last
+      child: DunotsFormColumn(
+        children: [
+          TextField(
+            controller: _labelController,
+            decoration: const InputDecoration(labelText: 'Rótulo'),
+          ),
+          TextField(
+            controller: _colorController,
+            decoration: const InputDecoration(labelText: 'Cor'),
+          ),
+          TextField(
+            controller: _widthController,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: const InputDecoration(labelText: 'Espessura'),
+          ),
+          DropdownButtonFormField<String>(
+            initialValue: _style,
+            decoration: const InputDecoration(labelText: 'Estilo'),
+            items: const [
+              DropdownMenuItem(value: 'solid', child: Text('Sólida')),
+              DropdownMenuItem(value: 'dashed', child: Text('Tracejada')),
+            ],
+            onChanged: (value) => setState(() => _style = value ?? 'solid'),
+          ),
+          CheckboxListTile(
+            contentPadding: EdgeInsets.zero,
+            value: _arrow,
+            onChanged: (value) => setState(() => _arrow = value ?? true),
+            title: const Text('Exibir seta'),
+          ),
+        ],
       ),
       actions: [
         TextButton(
@@ -1201,10 +1167,15 @@ class _EdgeListDialogState extends State<_EdgeListDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Conexões'),
-      content: SizedBox(
-        width: 480,
+    return DunotsModal(
+      title: 'Conexões',
+      subtitle: 'Edite ou remova as ligações entre os blocos.',
+      icon: Icons.link_outlined,
+      scrollable: false,
+      // ignore: sort_child_properties_last
+      child: SizedBox(
+        width: double.infinity,
+        height: MediaQuery.sizeOf(context).height * 0.48,
         child: _edges.isEmpty
             ? const Text('Nenhuma conexão cadastrada.')
             : ListView.separated(
