@@ -61,27 +61,76 @@ class SqliteQuizAttemptRepository implements QuizAttemptRepository {
   }
 
   QuizAttempt _fromRow(Map<String, Object?> row) {
-    final decodedAnswers = jsonDecode(row['answers']! as String) as Map;
-    final decodedReviewQuestionIds =
-        jsonDecode((row['review_question_ids'] ?? '[]') as String) as List;
-    final decodedReviewNotes =
-        jsonDecode((row['review_notes'] ?? '{}') as String) as Map;
+    final decodedAnswers = _decodeMap(row['answers']);
+    final decodedReviewQuestionIds = _decodeList(row['review_question_ids']);
+    final decodedReviewNotes = _decodeMap(row['review_notes']);
     return QuizAttempt(
       id: row['id']! as String,
       title: row['title']! as String,
-      questionIds: (jsonDecode(row['question_ids']! as String) as List)
-          .cast<String>(),
+      questionIds: _decodeList(row['question_ids'])
+          .map((value) => value.toString())
+          .toList(growable: false),
       currentIndex: row['current_index']! as int,
-      status: QuizAttemptStatus.values.byName(row['status']! as String),
+      status: _status(row['status']),
       answers: decodedAnswers.map(
-        (key, value) => MapEntry(key.toString(), value as int?),
+        (key, value) => MapEntry(key, _answerIndex(value)),
       ),
-      reviewQuestionIds: decodedReviewQuestionIds.cast<String>(),
+      reviewQuestionIds: decodedReviewQuestionIds
+          .map((value) => value.toString())
+          .toList(growable: false),
       reviewNotes: decodedReviewNotes.map(
-        (key, value) => MapEntry(key.toString(), value.toString()),
+        (key, value) => MapEntry(key, value.toString()),
       ),
-      createdAt: DateTime.parse(row['created_at']! as String),
-      updatedAt: DateTime.parse(row['updated_at']! as String),
+      createdAt: _date(row['created_at'], fallback: row['updated_at']),
+      updatedAt: _date(row['updated_at'], fallback: row['created_at']),
     );
+  }
+
+  Map<String, Object?> _decodeMap(Object? value) {
+    if (value is Map) return Map<String, Object?>.from(value);
+    if (value is! String || value.isEmpty) return const {};
+    try {
+      final decoded = jsonDecode(value);
+      return decoded is Map ? Map<String, Object?>.from(decoded) : const {};
+    } catch (_) {
+      return const {};
+    }
+  }
+
+  List<Object?> _decodeList(Object? value) {
+    if (value is List) return List<Object?>.from(value);
+    if (value is! String || value.isEmpty) return const [];
+    try {
+      final decoded = jsonDecode(value);
+      return decoded is List ? List<Object?>.from(decoded) : const [];
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  QuizAttemptStatus _status(Object? value) {
+    final normalized = value?.toString().toLowerCase().replaceAll('-', '_');
+    return normalized == 'finished' || normalized == 'completed'
+        ? QuizAttemptStatus.finished
+        : QuizAttemptStatus.inProgress;
+  }
+
+  int? _answerIndex(Object? value) {
+    if (value is num) return value.toInt();
+    final text = value?.toString().trim() ?? '';
+    final numeric = int.tryParse(text);
+    if (numeric != null) return numeric;
+    if (RegExp(r'^[A-Ea-e]$').hasMatch(text)) {
+      return text.toUpperCase().codeUnitAt(0) - 'A'.codeUnitAt(0);
+    }
+    return null;
+  }
+
+  DateTime _date(Object? value, {Object? fallback}) {
+    final parsed = DateTime.tryParse(value?.toString() ?? '');
+    if (parsed != null) return parsed;
+    final fallbackParsed = DateTime.tryParse(fallback?.toString() ?? '');
+    return fallbackParsed ??
+        DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
   }
 }

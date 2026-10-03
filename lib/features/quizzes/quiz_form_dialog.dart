@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../shared/widgets/dunots_modal.dart';
+
 class QuizFormData {
   final String title;
 
@@ -31,9 +33,11 @@ class _QuizFormDialogState extends State<QuizFormDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Novo simulado'),
-      content: TextField(
+    return DunotsModal(
+      title: 'Novo simulado',
+      icon: Icons.quiz_outlined,
+      // ignore: sort_child_properties_last
+      child: TextField(
         controller: titleController,
         autofocus: true,
         textInputAction: TextInputAction.done,

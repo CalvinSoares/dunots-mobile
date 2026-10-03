@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../app/dunots_theme.dart';
+import '../../shared/widgets/dunots_modal.dart';
 import '../../shared/widgets/study_widgets.dart';
 import '../questions/data/question_repository.dart';
 import '../questions/domain/question.dart';
@@ -57,56 +59,60 @@ class _QuizAttemptPageState extends State<QuizAttemptPage> {
             ),
         ],
       ),
-      body: FutureBuilder<List<Question>>(
-        future: _questionsFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done) {
-            return const Center(
-              child: StudyLoadingState(message: 'Carregando questões...'),
-            );
-          }
-          if (snapshot.hasError) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Text('Não foi possível carregar o simulado.'),
-                    const SizedBox(height: 12),
-                    OutlinedButton.icon(
-                      onPressed: () => setState(() {
-                        _questionsFuture = widget.questionRepository.getAll();
-                      }),
-                      icon: const Icon(Icons.refresh),
-                      label: const Text('Tentar novamente'),
-                    ),
-                  ],
+      body: SafeArea(
+        child: FutureBuilder<List<Question>>(
+          future: _questionsFuture,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState != ConnectionState.done) {
+              return const Center(
+                child: StudyLoadingState(message: 'Carregando questões...'),
+              );
+            }
+            if (snapshot.hasError) {
+              return Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text('Não foi possível carregar o simulado.'),
+                      const SizedBox(height: 12),
+                      OutlinedButton.icon(
+                        onPressed: () => setState(() {
+                          _questionsFuture = widget.questionRepository.getAll();
+                        }),
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Tentar novamente'),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            );
-          }
-          final questionsById = {
-            for (final question in snapshot.data ?? const <Question>[])
-              question.id: question,
-          };
-          final questions = _attempt.questionIds
-              .map((id) => questionsById[id])
-              .whereType<Question>()
-              .toList(growable: false);
-          if (questions.isEmpty) {
-            return const Center(
-              child: Padding(
-                padding: EdgeInsets.all(24),
-                child: Text('Nenhuma questão deste simulado está disponível.'),
-              ),
-            );
-          }
+              );
+            }
+            final questionsById = {
+              for (final question in snapshot.data ?? const <Question>[])
+                question.id: question,
+            };
+            final questions = _attempt.questionIds
+                .map((id) => questionsById[id])
+                .whereType<Question>()
+                .toList(growable: false);
+            if (questions.isEmpty) {
+              return const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Text(
+                    'Nenhuma questão deste simulado está disponível.',
+                  ),
+                ),
+              );
+            }
 
-          final index = _attempt.currentIndex.clamp(0, questions.length - 1);
-          final question = questions[index];
-          return _buildQuestion(context, question, index, questions.length);
-        },
+            final index = _attempt.currentIndex.clamp(0, questions.length - 1);
+            final question = questions[index];
+            return _buildQuestion(context, question, index, questions.length);
+          },
+        ),
       ),
     );
   }
@@ -121,7 +127,7 @@ class _QuizAttemptPageState extends State<QuizAttemptPage> {
       return;
     }
 
-    final data = await showDialog<_QuizAttemptEditData>(
+    final data = await showDunotsDrawer<_QuizAttemptEditData>(
       context: context,
       builder: (_) =>
           _QuizAttemptEditDialog(attempt: _attempt, questions: questions),
@@ -168,7 +174,7 @@ class _QuizAttemptPageState extends State<QuizAttemptPage> {
       return;
     }
 
-    final targetIndex = await showDialog<int>(
+    final targetIndex = await showDunotsDrawer<int>(
       context: context,
       builder: (_) =>
           _QuizProgressDialog(attempt: _attempt, questions: questions),
@@ -201,7 +207,7 @@ class _QuizAttemptPageState extends State<QuizAttemptPage> {
               ),
             ),
             if (isReadOnly && _isMarkedForReview(question.id))
-              const Icon(Icons.flag, color: Colors.deepPurple)
+              const Icon(Icons.flag, color: DunotsColors.purple)
             else if (!isFinished)
               IconButton(
                 tooltip: _isMarkedForReview(question.id)
@@ -365,7 +371,7 @@ class _QuizAttemptPageState extends State<QuizAttemptPage> {
         .map((id) => questionsById[id])
         .whereType<Question>()
         .toList(growable: false);
-    final decision = await showDialog<_FinalReviewDecision>(
+    final decision = await showDunotsDrawer<_FinalReviewDecision>(
       context: context,
       builder: (_) =>
           _FinalReviewDialog(attempt: _attempt, questions: questions),
@@ -478,8 +484,8 @@ class _FinalReviewDialog extends StatelessWidget {
                     ? Icons.flag
                     : Icons.help_outline,
                 color: attempt.reviewQuestionIds.contains(question.id)
-                    ? Colors.deepPurple
-                    : Colors.orange,
+                    ? DunotsColors.purple
+                    : DunotsColors.amber,
               ),
             ),
           ),
@@ -492,12 +498,19 @@ class _FinalReviewDialog extends StatelessWidget {
     if (pending.isEmpty && markedAnswered.isEmpty) {
       items.add(const Text('Todas as questões foram respondidas e revisadas.'));
     }
+    final dialogHeight = (MediaQuery.sizeOf(context).height * 0.48)
+        .clamp(220.0, 480.0)
+        .toDouble();
 
-    return AlertDialog(
-      title: const Text('Revisar antes de finalizar'),
-      content: SizedBox(
-        width: 580,
-        height: 500,
+    return DunotsModal(
+      title: 'Revisar antes de finalizar',
+      subtitle: 'Confira pendências e marcações antes de concluir.',
+      icon: Icons.fact_check_outlined,
+      scrollable: false,
+      // ignore: sort_child_properties_last
+      child: SizedBox(
+        width: double.infinity,
+        height: dialogHeight,
         child: ListView(children: items),
       ),
       actions: [
@@ -592,12 +605,53 @@ class _QuizProgressDialogState extends State<_QuizProgressDialog> {
         )
         .map((entry) => entry.key)
         .firstOrNull;
+    final compact = MediaQuery.sizeOf(context).width < 520;
+    final topicDropdown = DropdownButtonFormField<String>(
+      initialValue: topicFilter,
+      decoration: const InputDecoration(labelText: 'Tópico'),
+      items: [
+        const DropdownMenuItem(value: '', child: Text('Todos')),
+        ...topics.map(
+          (topic) => DropdownMenuItem(
+            value: topic,
+            child: Text(topic, overflow: TextOverflow.ellipsis),
+          ),
+        ),
+      ],
+      onChanged: (value) {
+        if (value != null) {
+          setState(() => topicFilter = value);
+        }
+      },
+    );
+    final statusDropdown = DropdownButtonFormField<String>(
+      initialValue: statusFilter,
+      decoration: const InputDecoration(labelText: 'Status'),
+      items: const [
+        DropdownMenuItem(value: 'all', child: Text('Todas')),
+        DropdownMenuItem(value: 'pending', child: Text('Pendentes')),
+        DropdownMenuItem(value: 'answered', child: Text('Respondidas')),
+        DropdownMenuItem(value: 'marked', child: Text('Marcadas')),
+      ],
+      onChanged: (value) {
+        if (value != null) {
+          setState(() => statusFilter = value);
+        }
+      },
+    );
+    final dialogHeight = (MediaQuery.sizeOf(context).height * 0.46)
+        .clamp(240.0, 480.0)
+        .toDouble();
 
-    return AlertDialog(
-      title: const Text('Progresso do simulado'),
-      content: SizedBox(
-        width: 560,
-        height: 560,
+    return DunotsModal(
+      title: 'Progresso do simulado',
+      subtitle: 'Filtre por tópico ou status e escolha onde continuar.',
+      icon: Icons.insights_outlined,
+      scrollable: false,
+      // ignore: sort_child_properties_last
+      child: SizedBox(
+        width: double.infinity,
+        height: dialogHeight,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -657,57 +711,18 @@ class _QuizProgressDialogState extends State<_QuizProgressDialog> {
               ),
             ),
             const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: DropdownButtonFormField<String>(
-                    initialValue: topicFilter,
-                    decoration: const InputDecoration(labelText: 'Tópico'),
-                    items: [
-                      const DropdownMenuItem(value: '', child: Text('Todos')),
-                      ...topics.map(
-                        (topic) => DropdownMenuItem(
-                          value: topic,
-                          child: Text(topic, overflow: TextOverflow.ellipsis),
-                        ),
-                      ),
-                    ],
-                    onChanged: (value) {
-                      if (value != null) {
-                        setState(() => topicFilter = value);
-                      }
-                    },
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: DropdownButtonFormField<String>(
-                    initialValue: statusFilter,
-                    decoration: const InputDecoration(labelText: 'Status'),
-                    items: const [
-                      DropdownMenuItem(value: 'all', child: Text('Todas')),
-                      DropdownMenuItem(
-                        value: 'pending',
-                        child: Text('Pendentes'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'answered',
-                        child: Text('Respondidas'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'marked',
-                        child: Text('Marcadas'),
-                      ),
-                    ],
-                    onChanged: (value) {
-                      if (value != null) {
-                        setState(() => statusFilter = value);
-                      }
-                    },
-                  ),
-                ),
-              ],
-            ),
+            if (compact) ...[
+              topicDropdown,
+              const SizedBox(height: 10),
+              statusDropdown,
+            ] else
+              Row(
+                children: [
+                  Expanded(child: topicDropdown),
+                  const SizedBox(width: 10),
+                  Expanded(child: statusDropdown),
+                ],
+              ),
             const SizedBox(height: 10),
             Text(
               '${visibleEntries.length} questão(ões) exibida(s)',
@@ -766,10 +781,10 @@ class _QuizProgressDialogState extends State<_QuizProgressDialog> {
                                   widget.attempt.reviewQuestionIds.contains(
                                     question.id,
                                   )
-                                  ? Colors.deepPurple
+                                  ? DunotsColors.purple
                                   : answered
-                                  ? Colors.green
-                                  : Colors.orange,
+                                  ? DunotsColors.mint
+                                  : DunotsColors.amber,
                             ),
                           ),
                         );
@@ -873,11 +888,15 @@ class _QuizAttemptEditDialogState extends State<_QuizAttemptEditDialog> {
       return normalizedQuery.isEmpty || searchable.contains(normalizedQuery);
     }).toList();
 
-    return AlertDialog(
-      title: const Text('Editar simulado'),
-      content: SizedBox(
-        width: 560,
-        height: 520,
+    return DunotsModal(
+      title: 'Editar simulado',
+      subtitle: 'Ajuste o nome e as questões desta tentativa.',
+      icon: Icons.tune,
+      scrollable: false,
+      // ignore: sort_child_properties_last
+      child: SizedBox(
+        width: double.infinity,
+        height: MediaQuery.sizeOf(context).height * 0.56,
         child: Column(
           children: [
             TextField(

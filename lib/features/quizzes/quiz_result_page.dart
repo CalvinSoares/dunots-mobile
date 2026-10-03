@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../app/dunots_theme.dart';
+import '../../shared/widgets/dunots_modal.dart';
 import '../../shared/widgets/study_widgets.dart';
 import '../questions/data/question_repository.dart';
 import '../questions/domain/question.dart';
@@ -38,223 +40,221 @@ class _QuizResultPageState extends State<QuizResultPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Resultado do simulado')),
-      body: FutureBuilder<List<Question>>(
-        future: _questionsFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done) {
-            return const Center(
-              child: StudyLoadingState(message: 'Calculando resultado...'),
-            );
-          }
-          if (snapshot.hasError) {
-            return Center(
-              child: StudyErrorState(
-                message: 'Não foi possível calcular o resultado.',
-                onRetry: () => setState(_reload),
-              ),
-            );
-          }
-          final questions = snapshot.data ?? const <Question>[];
-          final result = QuizAttemptResult.fromAttempt(
-            widget.attempt,
-            questions,
-          );
-          final topicResults = QuizAttemptResult.byTopic(
-            widget.attempt,
-            questions,
-          );
-          final examResults = QuizAttemptResult.byExam(
-            widget.attempt,
-            questions,
-          );
-          final questionsById = {
-            for (final question in questions) question.id: question,
-          };
-          final attemptQuestions = widget.attempt.questionIds
-              .map((questionId) => questionsById[questionId])
-              .whereType<Question>()
-              .toList(growable: false);
-          if (attemptQuestions.isEmpty) {
-            return const Center(
-              child: StudyEmptyState(
-                title: 'Nenhuma questão disponível para este resultado.',
-                detail: 'As questões podem ter sido removidas ou ainda não sincronizadas.',
-                icon: Icons.quiz_outlined,
-              ),
-            );
-          }
-          final incorrectQuestions = attemptQuestions
-              .where((question) {
-                final answer = widget.attempt.answers[question.id];
-                return answer != null &&
-                    answer != question.correctAlternativeIndex;
-              })
-              .toList(growable: false);
-          final unansweredQuestions = attemptQuestions
-              .where((question) => widget.attempt.answers[question.id] == null)
-              .toList(growable: false);
-          final markedQuestions = attemptQuestions
-              .where(
-                (question) =>
-                    widget.attempt.reviewQuestionIds.contains(question.id),
-              )
-              .toList(growable: false);
-          return ListView(
-            padding: const EdgeInsets.all(20),
-            children: [
-              Text(
-                widget.attempt.title,
-                style: Theme.of(context).textTheme.headlineSmall
-                    ?.copyWith(fontWeight: FontWeight.w800),
-              ),
-              const SizedBox(height: 10),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: OutlinedButton.icon(
-                  onPressed: () => _exportResult(attemptQuestions),
-                  icon: const Icon(Icons.picture_as_pdf_outlined),
-                  label: const Text('Exportar resultado em PDF'),
+      body: SafeArea(
+        child: FutureBuilder<List<Question>>(
+          future: _questionsFuture,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState != ConnectionState.done) {
+              return const Center(
+                child: StudyLoadingState(message: 'Calculando resultado...'),
+              );
+            }
+            if (snapshot.hasError) {
+              return Center(
+                child: StudyErrorState(
+                  message: 'Não foi possível calcular o resultado.',
+                  onRetry: () => setState(_reload),
                 ),
-              ),
-              const SizedBox(height: 20),
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    children: [
-                      Text(
-                        '${result.percentage.toStringAsFixed(0)}%',
-                        style: Theme.of(context).textTheme.displaySmall
-                            ?.copyWith(fontWeight: FontWeight.w800),
-                      ),
-                      const SizedBox(height: 4),
-                      const Text('aproveitamento'),
-                    ],
+              );
+            }
+            final questions = snapshot.data ?? const <Question>[];
+            final result = QuizAttemptResult.fromAttempt(
+              widget.attempt,
+              questions,
+            );
+            final topicResults = QuizAttemptResult.byTopic(
+              widget.attempt,
+              questions,
+            );
+            final examResults = QuizAttemptResult.byExam(
+              widget.attempt,
+              questions,
+            );
+            final questionsById = {
+              for (final question in questions) question.id: question,
+            };
+            final attemptQuestions = widget.attempt.questionIds
+                .map((questionId) => questionsById[questionId])
+                .whereType<Question>()
+                .toList(growable: false);
+            if (attemptQuestions.isEmpty) {
+              return const Center(
+                child: StudyEmptyState(
+                  title: 'Nenhuma questão disponível para este resultado.',
+                  detail: 'As questões podem ter sido removidas ou ainda não sincronizadas.',
+                  icon: Icons.quiz_outlined,
+                ),
+              );
+            }
+            final incorrectQuestions = attemptQuestions
+                .where((question) {
+                  final answer = widget.attempt.answers[question.id];
+                  return answer != null &&
+                      answer != question.correctAlternativeIndex;
+                })
+                .toList(growable: false);
+            final unansweredQuestions = attemptQuestions
+                .where(
+                  (question) => widget.attempt.answers[question.id] == null,
+                )
+                .toList(growable: false);
+            final markedQuestions = attemptQuestions
+                .where(
+                  (question) =>
+                      widget.attempt.reviewQuestionIds.contains(question.id),
+                )
+                .toList(growable: false);
+            return ListView(
+              padding: const EdgeInsets.all(20),
+              children: [
+                Text(
+                  widget.attempt.title,
+                  style: Theme.of(context).textTheme.headlineSmall
+                      ?.copyWith(fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 10),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: OutlinedButton.icon(
+                    onPressed: () => _exportResult(attemptQuestions),
+                    icon: const Icon(Icons.picture_as_pdf_outlined),
+                    label: const Text('Exportar resultado em PDF'),
                   ),
                 ),
-              ),
-              const SizedBox(height: 14),
-              _ResultRow(
-                label: 'Acertos',
-                value: result.correct,
-                color: Colors.green,
-              ),
-              _ResultRow(
-                label: 'Erros',
-                value: result.incorrect,
-                color: Colors.red,
-              ),
-              _ResultRow(
-                label: 'Não respondidas',
-                value: result.unanswered,
-                color: Colors.orange,
-              ),
-              const SizedBox(height: 22),
-              Text(
-                'Resumo da revisão',
-                style: Theme.of(context).textTheme.titleMedium
-                    ?.copyWith(fontWeight: FontWeight.w800),
-              ),
-              const SizedBox(height: 8),
-              _ReviewSummaryCard(
-                label: 'Questões erradas',
-                count: incorrectQuestions.length,
-                icon: Icons.cancel,
-                color: Colors.red,
-                onTap: incorrectQuestions.isEmpty
-                    ? null
-                    : () => _showReviewDialog(
-                        'Questões erradas',
-                        incorrectQuestions,
-                      ),
-              ),
-              _ReviewSummaryCard(
-                label: 'Questões pendentes',
-                count: unansweredQuestions.length,
-                icon: Icons.help_outline,
-                color: Colors.orange,
-                onTap: unansweredQuestions.isEmpty
-                    ? null
-                    : () => _showReviewDialog(
-                        'Questões pendentes',
-                        unansweredQuestions,
-                      ),
-              ),
-              _ReviewSummaryCard(
-                label: 'Questões marcadas',
-                count: markedQuestions.length,
-                icon: Icons.flag,
-                color: Colors.deepPurple,
-                onTap: markedQuestions.isEmpty
-                    ? null
-                    : () => _showReviewDialog(
-                        'Questões marcadas',
-                        markedQuestions,
-                      ),
-              ),
-              if (topicResults.isNotEmpty) ...[
+                const SizedBox(height: 20),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      children: [
+                        Text(
+                          '${result.percentage.toStringAsFixed(0)}%',
+                          style: Theme.of(context).textTheme.displaySmall
+                              ?.copyWith(fontWeight: FontWeight.w800),
+                        ),
+                        const SizedBox(height: 4),
+                        const Text('aproveitamento'),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                _ResultRow(
+                  label: 'Acertos',
+                  value: result.correct,
+                  color: DunotsColors.mint,
+                ),
+                _ResultRow(
+                  label: 'Erros',
+                  value: result.incorrect,
+                  color: Colors.red,
+                ),
+                _ResultRow(
+                  label: 'Não respondidas',
+                  value: result.unanswered,
+                  color: DunotsColors.amber,
+                ),
                 const SizedBox(height: 22),
                 Text(
-                  'Desempenho por tópico',
+                  'Resumo da revisão',
                   style: Theme.of(context).textTheme.titleMedium
                       ?.copyWith(fontWeight: FontWeight.w800),
                 ),
                 const SizedBox(height: 8),
-                ...topicResults.entries.map((entry) {
-                  final topicResult = entry.value;
-                  return _TopicResultCard(
-                    topic: entry.key,
-                    result: topicResult,
-                  );
-                }),
-              ],
-              if (examResults.isNotEmpty) ...[
+                _ReviewSummaryCard(
+                  label: 'Questões erradas',
+                  count: incorrectQuestions.length,
+                  icon: Icons.cancel,
+                  color: Colors.red,
+                  onTap: incorrectQuestions.isEmpty
+                      ? null
+                      : () => _showReviewDialog(
+                          'Questões erradas',
+                          incorrectQuestions,
+                        ),
+                ),
+                _ReviewSummaryCard(
+                  label: 'Questões pendentes',
+                  count: unansweredQuestions.length,
+                  icon: Icons.help_outline,
+                  color: DunotsColors.amber,
+                  onTap: unansweredQuestions.isEmpty
+                      ? null
+                      : () => _showReviewDialog(
+                          'Questões pendentes',
+                          unansweredQuestions,
+                        ),
+                ),
+                _ReviewSummaryCard(
+                  label: 'Questões marcadas',
+                  count: markedQuestions.length,
+                  icon: Icons.flag,
+                  color: DunotsColors.purple,
+                  onTap: markedQuestions.isEmpty
+                      ? null
+                      : () => _showReviewDialog(
+                          'Questões marcadas',
+                          markedQuestions,
+                        ),
+                ),
+                if (topicResults.isNotEmpty) ...[
+                  const SizedBox(height: 22),
+                  Text(
+                    'Desempenho por tópico',
+                    style: Theme.of(context).textTheme.titleMedium
+                        ?.copyWith(fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 8),
+                  ...topicResults.entries.map((entry) {
+                    final topicResult = entry.value;
+                    return _TopicResultCard(
+                      topic: entry.key,
+                      result: topicResult,
+                    );
+                  }),
+                ],
+                if (examResults.isNotEmpty) ...[
+                  const SizedBox(height: 22),
+                  Text(
+                    'Desempenho por concurso/prova',
+                    style: Theme.of(context).textTheme.titleMedium
+                        ?.copyWith(fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 8),
+                  ...examResults.entries.map((entry) {
+                    return _TopicResultCard(
+                      topic: entry.key,
+                      result: entry.value,
+                    );
+                  }),
+                ],
                 const SizedBox(height: 22),
                 Text(
-                  'Desempenho por concurso/prova',
+                  'Revisão das respostas',
                   style: Theme.of(context).textTheme.titleMedium
                       ?.copyWith(fontWeight: FontWeight.w800),
                 ),
                 const SizedBox(height: 8),
-                ...examResults.entries.map((entry) {
-                  return _TopicResultCard(
-                    topic: entry.key,
-                    result: entry.value,
+                ...widget.attempt.questionIds.map((questionId) {
+                  final question = questionsById[questionId];
+                  if (question == null) {
+                    return const SizedBox.shrink();
+                  }
+                  return _QuestionReviewCard(
+                    question: question,
+                    selectedAnswer: widget.attempt.answers[question.id],
                   );
                 }),
+                const SizedBox(height: 20),
+                OutlinedButton.icon(
+                  onPressed: _openReview,
+                  icon: const Icon(Icons.fact_check_outlined),
+                  label: const Text('Reabrir revisão'),
+                ),
               ],
-              const SizedBox(height: 22),
-              Text(
-                'Revisão das respostas',
-                style: Theme.of(context).textTheme.titleMedium
-                    ?.copyWith(fontWeight: FontWeight.w800),
-              ),
-              const SizedBox(height: 8),
-              ...widget.attempt.questionIds.map((questionId) {
-                final question = questionsById[questionId];
-                if (question == null) {
-                  return const SizedBox.shrink();
-                }
-                return _QuestionReviewCard(
-                  question: question,
-                  selectedAnswer: widget.attempt.answers[question.id],
-                );
-              }),
-              const SizedBox(height: 20),
-              OutlinedButton.icon(
-                onPressed: _openReview,
-                icon: const Icon(Icons.fact_check_outlined),
-                label: const Text('Reabrir revisão'),
-              ),
-              const SizedBox(height: 10),
-              OutlinedButton.icon(
-                onPressed: () => Navigator.of(context).pop(),
-                icon: const Icon(Icons.arrow_back),
-                label: const Text('Voltar ao histórico'),
-              ),
-            ],
-          );
-        },
+            );
+          },
+        ),
       ),
     );
   }
@@ -298,7 +298,7 @@ class _QuizResultPageState extends State<QuizResultPage> {
   }
 
   Future<void> _showReviewDialog(String title, List<Question> questions) async {
-    await showDialog<void>(
+    await showDunotsDrawer<void>(
       context: context,
       builder: (_) => _ReviewQuestionsDialog(
         title: title,
@@ -370,11 +370,16 @@ class _ReviewQuestionsDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(title),
-      content: SizedBox(
-        width: 560,
-        height: 420,
+    final height = MediaQuery.sizeOf(context).height * 0.52;
+    return DunotsModal(
+      title: title,
+      subtitle: 'Revise suas respostas e as questões marcadas.',
+      icon: Icons.fact_check_outlined,
+      scrollable: false,
+      // ignore: sort_child_properties_last
+      child: SizedBox(
+        width: double.infinity,
+        height: height.clamp(220.0, 520.0).toDouble(),
         child: ListView.separated(
           itemCount: questions.length,
           separatorBuilder: (_, _) => const SizedBox(height: 8),
@@ -448,9 +453,9 @@ class _QuestionReviewCard extends StatelessWidget {
     final isUnanswered = selectedAnswer == null;
     final isCorrect = selectedAnswer == question.correctAlternativeIndex;
     final color = isUnanswered
-        ? Colors.orange
+        ? DunotsColors.amber
         : isCorrect
-        ? Colors.green
+        ? DunotsColors.mint
         : Colors.red;
     return Card(
       child: ListTile(
