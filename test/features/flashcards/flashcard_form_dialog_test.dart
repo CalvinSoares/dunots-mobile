@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:dunots_mobile/features/flashcards/flashcard_form_dialog.dart';
+import 'package:dunots_mobile/shared/widgets/dunots_modal.dart';
 
 void main() {
   testWidgets('cria flashcard com código e tags', (tester) async {
@@ -11,7 +12,7 @@ void main() {
           body: Builder(
             builder: (context) => FilledButton(
               onPressed: () async {
-                final card = await showDialog(
+                final card = await showDunotsDrawer(
                   context: context,
                   builder: (_) => const FlashcardFormDialog(),
                 );

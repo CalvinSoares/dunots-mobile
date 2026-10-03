@@ -7,6 +7,38 @@ import 'package:dunots_mobile/features/flashcards/data/flashcard_repository.dart
 import 'package:dunots_mobile/features/flashcards/flashcards_preview_page.dart';
 
 void main() {
+  testWidgets('mostra o card criado sem aguardar uma nova leitura lenta', (
+    tester,
+  ) async {
+    final repository = _DelayedReadFlashcardRepository(
+      initialCards: [
+        Flashcard(
+          id: 'existing-card',
+          front: 'Card existente',
+          back: 'Resposta existente',
+          createdAt: DateTime(2026, 10, 1),
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: FlashcardsPreviewPage(repository: repository)),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Novo'));
+    await tester.pumpAndSettle();
+    final fields = find.byType(TextField);
+    await tester.enterText(fields.at(0), 'Card criado');
+    await tester.enterText(fields.at(1), 'Resposta criada');
+    await tester.tap(find.text('Criar'));
+    await tester.pump();
+
+    expect(find.text('Card criado'), findsOneWidget);
+  });
+
   testWidgets('exibe métricas e filtra flashcards por situação', (
     tester,
   ) async {
@@ -60,19 +92,12 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Todos (4)'), findsOneWidget);
-    expect(find.text('Vencidos (3)'), findsOneWidget);
-    expect(find.text('Novos (1)'), findsOneWidget);
-    expect(find.text('Difíceis (1)'), findsOneWidget);
-    expect(find.text('Revisados (3)'), findsOneWidget);
-    expect(find.text('3 pendentes hoje · 3 já revisados'), findsOneWidget);
-    expect(find.text('Recomendação de revisão'), findsOneWidget);
-    expect(find.text('Tema para priorizar: redes.'), findsOneWidget);
+    expect(find.byTooltip('Filtrar flashcards'), findsOneWidget);
+    expect(find.text('Todos (4)'), findsNothing);
+    expect(find.text('3 cards para revisar'), findsOneWidget);
+    expect(find.text('1 card difícil · priorize redes.'), findsOneWidget);
 
-    final recommendedButton = find.widgetWithText(
-      FilledButton,
-      'Iniciar recomendada',
-    );
+    final recommendedButton = find.widgetWithText(TextButton, 'Revisar');
     await tester.ensureVisible(recommendedButton);
     await tester.tap(recommendedButton);
     await tester.pumpAndSettle();
@@ -89,6 +114,14 @@ void main() {
     expect(find.text('Card vencido'), findsNothing);
 
     await tester.enterText(searchField, '');
+    await tester.tap(find.byTooltip('Filtrar flashcards'));
+    await tester.pumpAndSettle();
+    expect(find.text('Todos (4)'), findsOneWidget);
+    expect(find.text('Vencidos (3)'), findsOneWidget);
+    expect(find.text('Novos (1)'), findsOneWidget);
+    expect(find.text('Difíceis (1)'), findsOneWidget);
+    expect(find.text('Revisados (3)'), findsOneWidget);
+
     final redesChip = find.widgetWithText(FilterChip, 'redes');
     await tester.ensureVisible(redesChip);
     await tester.tap(redesChip);
@@ -141,9 +174,13 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byType(DropdownButtonFormField<int>).last);
+    await tester.tap(find.byTooltip('Mais ações dos flashcards'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Até 10 cards').last);
+    await tester.tap(find.text('Configurar revisão'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(DropdownButtonFormField<int>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('10 cards').last);
     await tester.pump();
     await tester.tap(find.byType(SwitchListTile));
     await tester.pump();
@@ -152,4 +189,90 @@ void main() {
     expect(saved.dailyLimit, 10);
     expect(saved.preferRecommended, isTrue);
   });
+
+  testWidgets('mantém ações e filtros utilizáveis em tela estreita', (
+    tester,
+  ) async {
+    final now = DateTime.now();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 360,
+            height: 800,
+            child: FlashcardsPreviewPage(
+              repository: InMemoryFlashcardRepository(
+                cards: [
+                  Flashcard(
+                    id: 'mobile-card',
+                    front: 'Pergunta longa para testar a largura',
+                    back: 'Resposta',
+                    createdAt: now,
+                    tags: const ['redes', 'infraestrutura', 'prioridade'],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byTooltip('Mais ações dos flashcards'), findsOneWidget);
+    expect(find.byTooltip('Histórico'), findsNothing);
+    expect(find.byTooltip('Progresso'), findsNothing);
+    expect(find.text('Novo'), findsOneWidget);
+    expect(find.byTooltip('Filtrar flashcards'), findsOneWidget);
+    expect(find.text('Configurar revisão'), findsNothing);
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.byTooltip('Mais ações dos flashcards'));
+    await tester.pumpAndSettle();
+    expect(find.text('Histórico'), findsOneWidget);
+    expect(find.text('Progresso'), findsOneWidget);
+    expect(find.text('Configurar revisão'), findsOneWidget);
+  });
+}
+
+class _DelayedReadFlashcardRepository implements FlashcardRepository {
+  final List<Flashcard> _cards;
+  bool _delayReads = false;
+
+  _DelayedReadFlashcardRepository({List<Flashcard> initialCards = const []})
+    : _cards = List.of(initialCards);
+
+  @override
+  Future<List<Flashcard>> getAll() {
+    if (!_delayReads) return Future.value(List.unmodifiable(_cards));
+    return Future<List<Flashcard>>.delayed(
+      const Duration(seconds: 5),
+      () => List.unmodifiable(_cards),
+    );
+  }
+
+  @override
+  Future<void> create(Flashcard card) async {
+    _cards.add(card);
+    _delayReads = true;
+  }
+
+  @override
+  Future<void> update(Flashcard card) async {
+    final index = _cards.indexWhere((item) => item.id == card.id);
+    _cards[index] = card;
+  }
+
+  @override
+  Future<void> delete(String cardId) async {
+    _cards.removeWhere((card) => card.id == cardId);
+  }
+
+  @override
+  Future<void> recordReview({
+    required String cardId,
+    required String rating,
+    required DateTime reviewedAt,
+    required DateTime dueAt,
+  }) async {}
 }

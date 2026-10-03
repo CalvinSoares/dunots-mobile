@@ -38,6 +38,49 @@ void main() {
     expect(find.text('Fácil'), findsNothing);
   });
 
+  testWidgets('mantém o fim da sessão acima da navegação do sistema', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    for (final viewport in const [
+      Size(320, 800),
+      Size(360, 800),
+      Size(390, 800),
+      Size(414, 800),
+      Size(840, 800),
+      Size(800, 360),
+    ]) {
+      tester.view.physicalSize = viewport;
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(
+              padding: const EdgeInsets.only(bottom: 24),
+              viewPadding: const EdgeInsets.only(bottom: 24),
+            ),
+            child: child!,
+          ),
+          home: FlashcardStudyPage(cards: [card]),
+        ),
+      );
+
+      expect(
+        find.ancestor(
+          of: find.byType(SingleChildScrollView),
+          matching: find.byType(SafeArea),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        tester.getRect(find.byType(SingleChildScrollView)).bottom,
+        lessThanOrEqualTo(viewport.height - 24),
+      );
+    }
+  });
+
   testWidgets('mostra classificações e conclui após resposta correta', (
     tester,
   ) async {
@@ -59,6 +102,40 @@ void main() {
 
     expect(find.text('Sessão concluída'), findsOneWidget);
     expect(find.text('1 flashcards respondidos.'), findsOneWidget);
+  });
+
+  testWidgets('revela o gabarito e avança registrando o card como difícil', (
+    tester,
+  ) async {
+    final secondCard = card.copyWith(
+      id: 'study-card-2',
+      front: 'Qual é a segunda resposta?',
+    );
+    final repository = InMemoryFlashcardRepository(cards: [card, secondCard]);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: FlashcardStudyPage(
+          cards: [card, secondCard],
+          repository: repository,
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Não lembro — ver resposta'));
+    await tester.pump();
+
+    expect(find.text('Gabarito'), findsOneWidget);
+    expect(find.text(card.back), findsOneWidget);
+    expect(find.text('Próximo card'), findsOneWidget);
+
+    await tester.tap(find.text('Próximo card'));
+    await tester.pumpAndSettle();
+
+    expect(find.text(secondCard.front), findsOneWidget);
+    final savedCard = (await repository.getAll()).first;
+    expect(savedCard.lastRating, 'difícil');
+    expect(savedCard.reviewCount, 1);
   });
 
   test('calcula os próximos intervalos da revisão', () {

@@ -16,6 +16,10 @@ void main() {
 
     expect(find.text(card.front), findsOneWidget);
     expect(find.text(card.back), findsOneWidget);
+
+    final semantics = tester.getSemantics(find.byType(FlashcardListItem));
+    expect(semantics.label, startsWith('Flashcard: ${card.front}.'));
+    expect(semantics.hint, 'Toque para abrir os detalhes.');
   });
 
   testWidgets('abre os detalhes ao tocar no flashcard', (tester) async {
