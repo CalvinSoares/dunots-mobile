@@ -59,7 +59,7 @@ void main() {
     await pumpPage(tester, const Size(800, 400));
 
     expect(find.text('Arquiteturas de rede'), findsOneWidget);
-    expect(find.byTooltip('Vincular material'), findsOneWidget);
+    expect(find.byTooltip('Ações da trilha'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

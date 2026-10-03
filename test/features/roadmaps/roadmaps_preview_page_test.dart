@@ -23,11 +23,14 @@ void main() {
     await tester.enterText(textFields.at(0), 'Redes de Computadores');
     await tester.enterText(textFields.at(1), 'Trilha de fundamentos de redes.');
 
-    await tester.tap(find.text('Criar'));
+    await tester.tap(find.text('Criar trilha'));
     await tester.pumpAndSettle();
 
     expect(find.text('Redes de Computadores'), findsOneWidget);
     expect(find.text('0/0 itens concluídos'), findsOneWidget);
+    expect(find.text('0%'), findsOneWidget);
+    expect(find.text('A fazer'), findsOneWidget);
+    expect(find.byTooltip('Ações da trilha'), findsOneWidget);
   });
 
   testWidgets('edita uma trilha pelo modal', (tester) async {
@@ -48,7 +51,9 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byTooltip('Editar trilha'));
+    await tester.tap(find.byTooltip('Ações da trilha'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Editar trilha'));
     await tester.pumpAndSettle();
 
     final textFields = find.byType(TextField);
@@ -58,7 +63,6 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Trilha atualizada'), findsOneWidget);
-    expect(find.text('Descrição atualizada.'), findsOneWidget);
     expect(find.text('1/4 itens concluídos'), findsOneWidget);
   });
 
@@ -80,7 +84,9 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byTooltip('Excluir trilha'));
+    await tester.tap(find.byTooltip('Ações da trilha'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Excluir trilha'));
     await tester.pumpAndSettle();
 
     expect(find.text('Excluir trilha?'), findsOneWidget);

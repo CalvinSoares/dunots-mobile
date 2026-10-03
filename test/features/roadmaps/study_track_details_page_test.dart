@@ -327,6 +327,64 @@ void main() {
     expect(find.text('→ Grupo de redes'), findsNothing);
   });
 
+  testWidgets('ordena os tópicos e o próximo pela prioridade', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: StudyTrackDetailsPage(
+          track: const StudyTrack(
+            id: 'track-priority-order',
+            title: 'Redes',
+            description: '',
+            completedItems: 0,
+            totalItems: 3,
+          ),
+          repository: InMemoryStudyNodeRepository(
+            nodes: const [
+              StudyNode(
+                id: 'node-low',
+                trackId: 'track-priority-order',
+                parentId: null,
+                title: 'Baixa prioridade',
+                description: '',
+                sortOrder: 0,
+                priority: StudyPriority.low,
+              ),
+              StudyNode(
+                id: 'node-urgent',
+                trackId: 'track-priority-order',
+                parentId: null,
+                title: 'Urgente',
+                description: '',
+                sortOrder: 99,
+                priority: StudyPriority.urgent,
+              ),
+              StudyNode(
+                id: 'node-high',
+                trackId: 'track-priority-order',
+                parentId: null,
+                title: 'Alta prioridade',
+                description: '',
+                sortOrder: 1,
+                priority: StudyPriority.high,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('→ Urgente'), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.text('Urgente')).dy,
+      lessThan(tester.getTopLeft(find.text('Alta prioridade')).dy),
+    );
+    expect(
+      tester.getTopLeft(find.text('Alta prioridade')).dy,
+      lessThan(tester.getTopLeft(find.text('Baixa prioridade')).dy),
+    );
+  });
+
   testWidgets('agrupa a movimentação do tópico no menu em tela compacta', (
     tester,
   ) async {
