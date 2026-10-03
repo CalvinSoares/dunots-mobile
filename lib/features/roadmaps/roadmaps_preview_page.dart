@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../flashcards/data/flashcard_repository.dart';
 import '../questions/data/question_repository.dart';
-import '../challenges/data/challenge_repository.dart';
 import '../quizzes/data/quiz_attempt_repository.dart';
 import '../../shared/widgets/study_widgets.dart';
+import '../../shared/widgets/dunots_modal.dart';
 import 'data/study_material_catalog_repository.dart';
 import 'data/study_node_repository.dart';
 import 'data/study_material_repository.dart';
@@ -13,33 +13,32 @@ import 'data/study_document_repository.dart';
 import 'data/study_document_import_service.dart';
 import 'data/study_material_progress_repository.dart';
 import 'domain/study_track.dart';
+import 'domain/study_node.dart';
 import 'presentation/study_tracks_controller.dart';
 import 'presentation/study_track_list_item.dart';
 import 'presentation/study_track_details_page.dart';
-import '../diagrams/data/diagram_repository.dart';
+import 'study_track_bulk_import_dialog.dart';
 
 class RoadmapsPreviewPage extends StatefulWidget {
+  final bool showHeader;
   final StudyTrackRepository? repository;
   final StudyNodeRepository? nodeRepository;
   final StudyNodeMaterialRepository? materialLinkRepository;
   final FlashcardRepository? flashcardRepository;
   final QuestionRepository? questionRepository;
   final QuizAttemptRepository? attemptRepository;
-  final DiagramRepository? diagramRepository;
-  final ChallengeRepository? challengeRepository;
   final StudyDocumentRepository? documentRepository;
   final StudyMaterialProgressRepository? materialProgressRepository;
 
   const RoadmapsPreviewPage({
     super.key,
+    this.showHeader = true,
     this.repository,
     this.nodeRepository,
     this.materialLinkRepository,
     this.flashcardRepository,
     this.questionRepository,
     this.attemptRepository,
-    this.diagramRepository,
-    this.challengeRepository,
     this.documentRepository,
     this.materialProgressRepository,
   });
@@ -68,8 +67,6 @@ class _RoadmapsPreviewPageState extends State<RoadmapsPreviewPage> {
           widget.flashcardRepository ?? InMemoryFlashcardRepository(),
       questionRepository:
           widget.questionRepository ?? InMemoryQuestionRepository(),
-      challengeRepository: widget.challengeRepository,
-      diagramRepository: widget.diagramRepository,
       documentRepository: widget.documentRepository,
     );
     _controller.load();
@@ -88,26 +85,26 @@ class _RoadmapsPreviewPageState extends State<RoadmapsPreviewPage> {
       builder: (context, _) {
         return PreviewPage(
           icon: Icons.route_outlined,
-          title: 'Trilhas de estudo',
-          subtitle: 'Organize tópicos, subtópicos e materiais.',
+          title: 'Minhas trilhas',
+          subtitle: 'Continue de onde parou.',
+          showHeader: widget.showHeader,
           child: Column(
             children: [
               Align(
                 alignment: Alignment.centerRight,
-                child: Wrap(
-                  spacing: 10,
-                  runSpacing: 10,
-                  alignment: WrapAlignment.end,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    OutlinedButton.icon(
-                      onPressed: () => _importDocument(context),
-                      icon: const Icon(Icons.upload_file_outlined),
-                      label: const Text('Importar material'),
-                    ),
                     FilledButton.icon(
                       onPressed: () => _showCreateTrackDialog(context),
                       icon: const Icon(Icons.add),
                       label: const Text('Nova trilha'),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton.filledTonal(
+                      tooltip: 'Importar material',
+                      onPressed: () => _importDocument(context),
+                      icon: const Icon(Icons.upload_file_outlined),
                     ),
                   ],
                 ),
@@ -122,18 +119,21 @@ class _RoadmapsPreviewPageState extends State<RoadmapsPreviewPage> {
   }
 
   Future<void> _showCreateTrackDialog(BuildContext context) async {
-    final data = await showDialog<_TrackFormData>(
+    final result = await showDunotsDrawer<_TrackCreationResult>(
       context: context,
-      builder: (_) => const _TrackFormDialog(
-        dialogTitle: 'Nova trilha',
-        actionLabel: 'Criar',
-      ),
+      builder: (_) => const _TrackCreationDialog(),
     );
 
-    if (data == null || !mounted) {
+    if (result == null || !mounted) {
       return;
     }
 
+    if (result.bulk != null) {
+      await _createTrackFromBulk(result.bulk!);
+      return;
+    }
+
+    final data = result.form!;
     try {
       await _controller.createTrack(
         title: data.title,
@@ -144,6 +144,59 @@ class _RoadmapsPreviewPageState extends State<RoadmapsPreviewPage> {
         return;
       }
 
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error.message.toString())));
+    }
+  }
+
+  Future<void> _createTrackFromBulk(StudyTrackBulkFormData data) async {
+    try {
+      final track = await _controller.createTrack(
+        title: data.title,
+        description: data.description,
+      );
+      final nextOrderByParent = <String?, int>{};
+      final stack = <_BulkNodeStackItem>[];
+      final now = DateTime.now().toUtc();
+
+      for (var index = 0; index < data.items.length; index++) {
+        final item = data.items[index];
+        while (stack.isNotEmpty && stack.last.depth >= item.depth) {
+          stack.removeLast();
+        }
+        final parentId = stack.isEmpty ? null : stack.last.id;
+        final sortOrder = nextOrderByParent[parentId] ?? 0;
+        final node = StudyNode(
+          id: 'node-${now.microsecondsSinceEpoch}-$index',
+          trackId: track.id,
+          parentId: parentId,
+          title: item.title,
+          description: item.description ?? '',
+          sortOrder: sortOrder,
+          priority: data.priority,
+          createdAt: now,
+          updatedAt: now,
+        );
+        await _nodeRepository.create(node);
+        nextOrderByParent[parentId] = sortOrder + 1;
+        stack.add(_BulkNodeStackItem(depth: item.depth, id: node.id));
+      }
+
+      await _controller.repository.update(
+        track.copyWith(
+          totalItems: data.items.length,
+          updatedAt: DateTime.now().toUtc(),
+        ),
+      );
+      await _controller.load();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Trilha criada com ${data.items.length} item(ns).'),
+        ),
+      );
+    } on ArgumentError catch (error) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(error.message.toString())));
     }
@@ -161,8 +214,6 @@ class _RoadmapsPreviewPageState extends State<RoadmapsPreviewPage> {
           flashcardRepository: widget.flashcardRepository,
           questionRepository: widget.questionRepository,
           attemptRepository: widget.attemptRepository,
-          diagramRepository: widget.diagramRepository,
-          challengeRepository: widget.challengeRepository,
           documentRepository: widget.documentRepository,
           materialProgressRepository: widget.materialProgressRepository,
         ),
@@ -209,7 +260,7 @@ class _RoadmapsPreviewPageState extends State<RoadmapsPreviewPage> {
     BuildContext context,
     StudyTrack track,
   ) async {
-    final data = await showDialog<_TrackFormData>(
+    final data = await showDunotsDrawer<_TrackFormData>(
       context: context,
       builder: (_) => _TrackFormDialog(
         dialogTitle: 'Editar trilha',
@@ -243,24 +294,14 @@ class _RoadmapsPreviewPageState extends State<RoadmapsPreviewPage> {
     BuildContext context,
     StudyTrack track,
   ) async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showDunotsDrawer<bool>(
       context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text('Excluir trilha?'),
-          content: Text('A trilha "${track.title}" será removida desta lista.'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('Cancelar'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: const Text('Excluir'),
-            ),
-          ],
-        );
-      },
+      builder: (_) => DunotsConfirmDialog(
+        title: 'Excluir trilha?',
+        message: 'A trilha "${track.title}" será removida desta lista.',
+        confirmLabel: 'Excluir',
+        icon: Icons.delete_outline,
+      ),
     );
 
     if (confirmed != true || !mounted) {
@@ -307,11 +348,178 @@ class _RoadmapsPreviewPageState extends State<RoadmapsPreviewPage> {
   }
 }
 
+class _TrackCreationResult {
+  final _TrackFormData? form;
+  final StudyTrackBulkFormData? bulk;
+
+  const _TrackCreationResult.form(this.form) : bulk = null;
+
+  const _TrackCreationResult.bulk(this.bulk) : form = null;
+}
+
+class _TrackCreationDialog extends StatefulWidget {
+  const _TrackCreationDialog();
+
+  @override
+  State<_TrackCreationDialog> createState() => _TrackCreationDialogState();
+}
+
+class _TrackCreationDialogState extends State<_TrackCreationDialog>
+    with SingleTickerProviderStateMixin {
+  late final TabController tabController;
+  late final TextEditingController titleController;
+  late final TextEditingController descriptionController;
+  final bulkFormKey = GlobalKey<StudyTrackBulkImportFormState>();
+  String? validationError;
+
+  @override
+  void initState() {
+    super.initState();
+    tabController = TabController(length: 2, vsync: this)
+      ..addListener(_handleTabChanged);
+    titleController = TextEditingController();
+    descriptionController = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    tabController
+      ..removeListener(_handleTabChanged)
+      ..dispose();
+    titleController.dispose();
+    descriptionController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isBulk = tabController.index == 1;
+    return DunotsModal(
+      title: 'Nova trilha',
+      subtitle: isBulk
+          ? 'Cole vários tópicos e subtópicos de uma vez.'
+          : 'Crie uma trilha para organizar seus estudos.',
+      icon: Icons.route_outlined,
+      // ignore: sort_child_properties_last
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TabBar(
+            controller: tabController,
+            tabs: const [
+              Tab(text: 'Nova trilha'),
+              Tab(text: 'Em massa'),
+            ],
+          ),
+          const SizedBox(height: 16),
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 180),
+            child: isBulk
+                ? StudyTrackBulkImportForm(
+                    key: bulkFormKey,
+                    onChanged: () => setState(() {}),
+                    onSubmitted: _submitBulk,
+                  )
+                : _buildManualForm(),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton(
+          onPressed: isBulk
+              ? bulkFormKey.currentState?.canSubmit == true
+                    ? bulkFormKey.currentState!.submit
+                    : null
+              : _canSubmitManual
+              ? _submitManual
+              : null,
+          child: const Text('Criar trilha'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildManualForm() {
+    return Column(
+      key: const ValueKey('manual-track-form'),
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        TextField(
+          controller: titleController,
+          autofocus: true,
+          textInputAction: TextInputAction.next,
+          onChanged: (_) => setState(() => validationError = null),
+          decoration: const InputDecoration(
+            labelText: 'Título *',
+            hintText: 'Ex.: Análise de Sistemas',
+          ),
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          controller: descriptionController,
+          maxLines: 3,
+          decoration: const InputDecoration(
+            labelText: 'Descrição (opcional)',
+            hintText: 'Explique o objetivo desta trilha',
+          ),
+        ),
+        if (validationError != null) ...[
+          const SizedBox(height: 12),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              validationError!,
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  bool get _canSubmitManual => titleController.text.trim().isNotEmpty;
+
+  void _submitManual() {
+    if (!_canSubmitManual) {
+      setState(() => validationError = 'Informe um título para a trilha.');
+      return;
+    }
+
+    Navigator.of(context).pop(
+      _TrackCreationResult.form(
+        _TrackFormData(
+          title: titleController.text,
+          description: descriptionController.text,
+        ),
+      ),
+    );
+  }
+
+  void _submitBulk(StudyTrackBulkFormData data) {
+    Navigator.of(context).pop(_TrackCreationResult.bulk(data));
+  }
+
+  void _handleTabChanged() {
+    if (mounted) setState(() {});
+  }
+}
+
 class _TrackFormData {
   final String title;
   final String description;
 
   const _TrackFormData({required this.title, required this.description});
+}
+
+class _BulkNodeStackItem {
+  final int depth;
+  final String id;
+
+  const _BulkNodeStackItem({required this.depth, required this.id});
 }
 
 class _TrackFormDialog extends StatefulWidget {
@@ -354,42 +562,42 @@ class _TrackFormDialogState extends State<_TrackFormDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(widget.dialogTitle),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: titleController,
-              autofocus: true,
-              textInputAction: TextInputAction.next,
-              decoration: const InputDecoration(
-                labelText: 'Título',
-                hintText: 'Ex.: Análise de Sistemas',
-              ),
+    return DunotsModal(
+      title: widget.dialogTitle,
+      icon: Icons.route_outlined,
+      // ignore: sort_child_properties_last
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: titleController,
+            autofocus: true,
+            textInputAction: TextInputAction.next,
+            decoration: const InputDecoration(
+              labelText: 'Título',
+              hintText: 'Ex.: Análise de Sistemas',
             ),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: descriptionController,
+            maxLines: 3,
+            decoration: const InputDecoration(
+              labelText: 'Descrição (opcional)',
+              hintText: 'Explique o objetivo desta trilha',
+            ),
+          ),
+          if (validationError != null) ...[
             const SizedBox(height: 12),
-            TextField(
-              controller: descriptionController,
-              maxLines: 3,
-              decoration: const InputDecoration(
-                labelText: 'Descrição (opcional)',
-                hintText: 'Explique o objetivo desta trilha',
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                validationError!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
               ),
             ),
-            if (validationError != null) ...[
-              const SizedBox(height: 12),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  validationError!,
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
-                ),
-              ),
-            ],
           ],
-        ),
+        ],
       ),
       actions: [
         TextButton(

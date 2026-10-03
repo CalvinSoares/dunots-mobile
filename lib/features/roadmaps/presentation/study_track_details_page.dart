@@ -24,6 +24,7 @@ import 'study_node_details_page.dart';
 import '../domain/study_track.dart';
 import 'study_node_filters.dart';
 import 'study_nodes_controller.dart';
+import 'study_node_ordering.dart';
 import '../../../shared/widgets/dunots_modal.dart';
 
 class StudyTrackDetailsPage extends StatefulWidget {
@@ -546,28 +547,8 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
         .toList();
     final candidates = leaves.isEmpty ? pending : leaves;
 
-    candidates.sort((a, b) {
-      final priority = _priorityRank(b.priority)
-          .compareTo(_priorityRank(a.priority));
-      if (priority != 0) return priority;
-      return a.sortOrder.compareTo(b.sortOrder);
-    });
+    candidates.sort(StudyNodeOrdering.compare);
     return candidates.first;
-  }
-
-  int _priorityRank(StudyPriority priority) {
-    switch (priority) {
-      case StudyPriority.none:
-        return 0;
-      case StudyPriority.low:
-        return 1;
-      case StudyPriority.medium:
-        return 2;
-      case StudyPriority.high:
-        return 3;
-      case StudyPriority.urgent:
-        return 4;
-    }
   }
 
   String _nodeStatusLabel(StudyNode node, int completedMaterials) {
@@ -622,7 +603,7 @@ class _StudyTrackDetailsPageState extends State<StudyTrackDetailsPage> {
       childrenByParent.putIfAbsent(node.parentId, () => []).add(node);
     }
     for (final children in childrenByParent.values) {
-      children.sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+      children.sort(StudyNodeOrdering.compare);
     }
 
     final rows = <_VisibleNodeRow>[];
