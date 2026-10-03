@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
+import '../../shared/widgets/dunots_modal.dart';
 import 'sync_database_repository.dart';
 import 'sync_crypto.dart';
 import 'sync_network_client.dart';
@@ -76,26 +77,21 @@ class _SyncDialogState extends State<SyncDialog>
   @override
   Widget build(BuildContext context) {
     final screen = MediaQuery.sizeOf(context);
-    final horizontalInset = SyncDialogLayout.horizontalInset(screen);
-    final contentWidth = SyncDialogLayout.contentWidth(screen);
     final contentHeight = SyncDialogLayout.contentHeight(screen);
 
-    return AlertDialog(
-      insetPadding: EdgeInsets.symmetric(
-        horizontal: horizontalInset,
-        vertical: 20,
-      ),
-      title: const Row(
-        children: [
-          Icon(Icons.sync),
-          SizedBox(width: 10),
-          Text('Sincronizar dados'),
-        ],
-      ),
-      content: SizedBox(
-        width: contentWidth,
+    return DunotsModal(
+      title: 'Sincronizar dados',
+      icon: Icons.sync,
+      scrollable: false,
+      actions: [
+        TextButton(
+          onPressed: busy ? null : () => Navigator.of(context).pop(),
+          child: const Text('Fechar'),
+        ),
+      ],
+      child: SizedBox(
+        height: contentHeight,
         child: Column(
-          mainAxisSize: MainAxisSize.min,
           children: [
             TabBar(
               controller: tabs,
@@ -114,8 +110,7 @@ class _SyncDialogState extends State<SyncDialog>
               ],
             ),
             const SizedBox(height: 16),
-            SizedBox(
-              height: contentHeight,
+            Expanded(
               child: TabBarView(
                 controller: tabs,
                 children: [
@@ -129,12 +124,6 @@ class _SyncDialogState extends State<SyncDialog>
           ],
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: busy ? null : () => Navigator.of(context).pop(),
-          child: const Text('Fechar'),
-        ),
-      ],
     );
   }
 
@@ -261,12 +250,26 @@ class _SyncDialogState extends State<SyncDialog>
           title: 'Parear pela rede local',
           detail: 'Leia o QR Code do outro dispositivo ou cole o convite. O endereço, token e expiração seguem o mesmo padrão no desktop e no mobile.',
         ),
+        if (message != null) ...[
+          const SizedBox(height: 12),
+          _SyncStatus(message: message!, success: success),
+        ],
         const SizedBox(height: 14),
         if (hostInfo == null)
           FilledButton.icon(
             onPressed: busy ? null : _startMobileHost,
-            icon: const Icon(Icons.qr_code_2),
-            label: const Text('Compartilhar este mobile'),
+            icon: busy
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.qr_code_2),
+            label: Text(
+              busy
+                  ? 'Iniciando compartilhamento...'
+                  : 'Compartilhar este mobile',
+            ),
           )
         else
           _buildMobileHostCard(),
@@ -311,8 +314,16 @@ class _SyncDialogState extends State<SyncDialog>
         const SizedBox(height: 12),
         FilledButton.icon(
           onPressed: busy ? null : _receiveNetwork,
-          icon: const Icon(Icons.download_outlined),
-          label: const Text('Receber do outro dispositivo'),
+          icon: busy
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.download_outlined),
+          label: Text(
+            busy ? 'Recebendo dados...' : 'Receber do outro dispositivo',
+          ),
         ),
         if (networkSession != null) ...[
           const SizedBox(height: 14),
@@ -341,8 +352,20 @@ class _SyncDialogState extends State<SyncDialog>
                       ),
                       FilledButton.icon(
                         onPressed: busy ? null : _sendNetworkBack,
-                        icon: const Icon(Icons.upload_outlined),
-                        label: const Text('Enviar meus dados de volta'),
+                        icon: busy
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.upload_outlined),
+                        label: Text(
+                          busy
+                              ? 'Enviando dados...'
+                              : 'Enviar meus dados de volta',
+                        ),
                       ),
                     ],
                   ),
@@ -350,10 +373,6 @@ class _SyncDialogState extends State<SyncDialog>
               ),
             ),
           ),
-        ],
-        if (message != null && tabs.index == 3) ...[
-          const SizedBox(height: 14),
-          _SyncStatus(message: message!, success: success),
         ],
       ],
     );
@@ -431,7 +450,8 @@ class _SyncDialogState extends State<SyncDialog>
       pairingCodeController.text = pairing.encode();
       setState(() {
         scannerOpen = false;
-        message = 'Convite lido. Confirme o recebimento para iniciar o pareamento.';
+        message =
+            'Convite lido. Confirme o recebimento para iniciar o pareamento.';
         success = true;
       });
     } catch (error) {
@@ -448,7 +468,9 @@ class _SyncDialogState extends State<SyncDialog>
       message = null;
     });
     try {
-      final info = await networkHost.start(await widget.repository.exportPackage());
+      final info = await networkHost.start(
+        await widget.repository.exportPackage(),
+      );
       if (!mounted) return;
       hostPollTimer?.cancel();
       hostPollTimer = Timer.periodic(
@@ -486,7 +508,8 @@ class _SyncDialogState extends State<SyncDialog>
         resolutions.clear();
         defaultResolution = SyncConflictResolution.keepLocal;
         success = true;
-        message = 'O desktop enviou os dados dele. Revise a prévia antes de aplicar.';
+        message =
+            'O desktop enviou os dados dele. Revise a prévia antes de aplicar.';
       });
       tabs.animateTo(1);
     } catch (error) {
@@ -542,24 +565,15 @@ class _SyncDialogState extends State<SyncDialog>
   }
 
   Future<void> _restore(SyncBackup backup) async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showDunotsDrawer<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Restaurar backup?'),
-        content: Text(
-          'Os dados atuais serão substituídos pelo snapshot ${backup.id}. '
-          'Um backup de segurança será criado antes da restauração.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Restaurar'),
-          ),
-        ],
+      builder: (_) => DunotsConfirmDialog(
+        title: 'Restaurar backup?',
+        message:
+            'Os dados atuais serão substituídos pelo snapshot ${backup.id}. '
+            'Um backup de segurança será criado antes da restauração.',
+        confirmLabel: 'Restaurar',
+        icon: Icons.restore_rounded,
       ),
     );
     if (confirmed != true) return;

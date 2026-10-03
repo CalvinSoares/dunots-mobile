@@ -225,7 +225,10 @@ class SyncDatabaseRepository {
             collection == SyncCollections.syncTombstones) {
           continue;
         }
-        for (final record in package.recordsFor(collection)) {
+        final records = collection == SyncCollections.roadmapNodes
+            ? _roadmapRecordsInDependencyOrder(package.recordsFor(collection))
+            : package.recordsFor(collection);
+        for (final record in records) {
           await _upsert(transaction, collection, record);
         }
       }
@@ -364,7 +367,12 @@ class SyncDatabaseRepository {
         }
         final current =
             localByCollection[collection] ?? const <String, SyncRecord>{};
-        for (final received in preview.package.recordsFor(collection)) {
+        final records = collection == SyncCollections.roadmapNodes
+            ? _roadmapRecordsInDependencyOrder(
+                preview.package.recordsFor(collection),
+              )
+            : preview.package.recordsFor(collection);
+        for (final received in records) {
           final tombstone = localTombstones['$collection:${received.id}'];
           if (tombstone != null &&
               _date(tombstone.values['deletedAt'])
@@ -624,17 +632,25 @@ class SyncDatabaseRepository {
   }
 
   SyncRecord _attemptRecord(Map<String, Object?> row) {
+    final status = _desktopAttemptStatus(row['status']);
+    final createdAt = _syncTimestamp(row, const ['created_at', 'updated_at']);
+    final updatedAt = _syncTimestamp(row, const ['updated_at', 'created_at']);
     return SyncRecord({
       'id': _string(row['id']),
       'title': _string(row['title']),
       'questionIds': _decodeList(row['question_ids']),
       'currentIndex': row['current_index'],
-      'status': row['status'],
+      // O desktop usa `currentQuestionIndex` e `in-progress`; manter os
+      // aliases evita que uma exportação mobile perca o ponto da tentativa.
+      'currentQuestionIndex': row['current_index'],
+      'status': status,
       'answers': _decodeMap(row['answers']),
       'reviewQuestionIds': _decodeList(row['review_question_ids']),
       'reviewNotes': _decodeMap(row['review_notes']),
-      'createdAt': _string(row['created_at']),
-      'updatedAt': _string(row['updated_at']),
+      'createdAt': createdAt,
+      'startedAt': createdAt,
+      'updatedAt': updatedAt,
+      if (status == 'completed') 'finishedAt': updatedAt,
     });
   }
 
@@ -659,6 +675,7 @@ class SyncDatabaseRepository {
       'description': _string(row['description']),
       'sortOrder': row['sort_order'],
       'isCompleted': row['is_completed'] == 1,
+      'status': row['status'] ?? 0,
       'notes': _string(row['notes']),
       'priority': row['priority'],
       'createdAt': _string(row['created_at']),
@@ -805,17 +822,34 @@ class SyncDatabaseRepository {
         );
         return;
       case SyncCollections.quizAttempts:
+        final createdAt = _recordTimestamp(values, const [
+          'createdAt',
+          'startedAt',
+          'updatedAt',
+          'finishedAt',
+        ]);
+        final updatedAt = _recordTimestamp(values, const [
+          'updatedAt',
+          'finishedAt',
+          'startedAt',
+          'createdAt',
+        ]);
         await executor.insert('quiz_attempts', {
           'id': record.id,
           'title': _string(values['title']),
           'question_ids': jsonEncode(_list(values['questionIds'])),
-          'current_index': values['currentIndex'] ?? 0,
-          'status': _string(values['status']),
-          'answers': jsonEncode(_map(values['answers'])),
+          'current_index': _int(
+            values['currentIndex'] ?? values['currentQuestionIndex'],
+          ),
+          'status': _mobileAttemptStatus(
+            values['status'],
+            finishedAt: values['finishedAt'],
+          ),
+          'answers': jsonEncode(_mobileAttemptAnswers(values['answers'])),
           'review_question_ids': jsonEncode(_list(values['reviewQuestionIds'])),
           'review_notes': jsonEncode(_map(values['reviewNotes'])),
-          'created_at': _string(values['createdAt']),
-          'updated_at': _string(values['updatedAt']),
+          'created_at': createdAt,
+          'updated_at': updatedAt,
         }, conflictAlgorithm: ConflictAlgorithm.replace);
         return;
       case SyncCollections.studyRoadmaps:
@@ -830,16 +864,32 @@ class SyncDatabaseRepository {
         }, conflictAlgorithm: ConflictAlgorithm.replace);
         return;
       case SyncCollections.roadmapNodes:
+        final trackId = _string(values['trackId'] ?? values['roadmapId']);
+        final parentId = _optionalString(values['parentId']);
+        final parentExists =
+            parentId == null ||
+            (await executor.query(
+              'study_nodes',
+              columns: ['id'],
+              where: 'id = ?',
+              whereArgs: [parentId],
+              limit: 1,
+            )).isNotEmpty;
         await executor.insert('study_nodes', {
           'id': record.id,
-          'track_id': _string(values['trackId']),
-          'parent_id': values['parentId'],
+          'track_id': trackId,
+          'parent_id': parentExists ? parentId : null,
           'title': _string(values['title']),
           'description': _string(values['description']),
-          'sort_order': values['sortOrder'] ?? 0,
-          'is_completed': values['isCompleted'] == true ? 1 : 0,
+          'sort_order': _int(values['sortOrder'] ?? values['order']),
+          'is_completed':
+              _bool(values['isCompleted'] ?? values['completed']) ||
+                  _status(values['status']) == 3
+              ? 1
+              : 0,
+          'status': _status(values['status']),
           'notes': _string(values['notes']),
-          'priority': values['priority'] ?? 0,
+          'priority': _priority(values['priority']),
           'created_at': _string(values['createdAt']),
           'updated_at': _string(values['updatedAt']),
         }, conflictAlgorithm: ConflictAlgorithm.replace);
@@ -847,8 +897,10 @@ class SyncDatabaseRepository {
       case SyncCollections.roadmapLinks:
         await executor.insert('study_node_materials', {
           'node_id': _string(values['nodeId']),
-          'material_id': _string(values['materialId']),
-          'material_type': _string(values['materialType']),
+          'material_id': _string(values['materialId'] ?? values['resourceId']),
+          'material_type': _mobileMaterialType(
+            values['materialType'] ?? values['resourceType'],
+          ),
           'updated_at': _string(values['updatedAt']),
         }, conflictAlgorithm: ConflictAlgorithm.replace);
         return;
@@ -969,6 +1021,125 @@ class SyncDatabaseRepository {
   }
 
   String _string(Object? value) => value?.toString() ?? '';
+
+  String _recordTimestamp(Map<String, dynamic> values, List<String> keys) {
+    for (final key in keys) {
+      final candidate = _string(values[key]);
+      if (DateTime.tryParse(candidate) != null) return candidate;
+    }
+    return DateTime.now().toUtc().toIso8601String();
+  }
+
+  String _syncTimestamp(Map<String, Object?> row, List<String> keys) {
+    for (final key in keys) {
+      final candidate = _string(row[key]);
+      if (DateTime.tryParse(candidate) != null) return candidate;
+    }
+    return DateTime.now().toUtc().toIso8601String();
+  }
+
+  String _mobileAttemptStatus(Object? value, {Object? finishedAt}) {
+    final normalized = _string(value).toLowerCase().replaceAll('-', '_');
+    if (normalized == 'completed' || normalized == 'finished') {
+      return 'finished';
+    }
+    if (_string(finishedAt).isNotEmpty) return 'finished';
+    return 'inProgress';
+  }
+
+  String _desktopAttemptStatus(Object? value) {
+    return _mobileAttemptStatus(value) == 'finished'
+        ? 'completed'
+        : 'in-progress';
+  }
+
+  Map<String, Object?> _mobileAttemptAnswers(Object? value) {
+    return _map(value).map(
+      (questionId, answer) => MapEntry(questionId, _mobileAnswerIndex(answer)),
+    );
+  }
+
+  int? _mobileAnswerIndex(Object? value) {
+    if (value is num) return value.toInt();
+    final text = _string(value).trim();
+    final numeric = int.tryParse(text);
+    if (numeric != null) return numeric;
+    if (RegExp(r'^[A-Ea-e]$').hasMatch(text)) {
+      return text.toUpperCase().codeUnitAt(0) - 'A'.codeUnitAt(0);
+    }
+    return null;
+  }
+
+  int _int(Object? value) {
+    if (value is num) return value.toInt();
+    return int.tryParse(value?.toString() ?? '') ?? 0;
+  }
+
+  bool _bool(Object? value) {
+    if (value is bool) return value;
+    if (value is num) return value != 0;
+    return value?.toString().toLowerCase() == 'true';
+  }
+
+  int _priority(Object? value) {
+    if (value is num) return value.toInt().clamp(0, 4).toInt();
+    return switch (value?.toString().toLowerCase()) {
+      'low' => 1,
+      'medium' => 2,
+      'high' => 3,
+      'urgent' => 4,
+      _ => 0,
+    };
+  }
+
+  int _status(Object? value) {
+    if (value is num) return value.toInt().clamp(0, 3).toInt();
+    return switch (value?.toString().toLowerCase()) {
+      'inprogress' || 'in_progress' || 'em andamento' => 1,
+      'review' || 'revisar' => 2,
+      'completed' || 'concluido' || 'concluído' => 3,
+      _ => 0,
+    };
+  }
+
+  String _mobileMaterialType(Object? value) {
+    return switch (value?.toString()) {
+      'quiz-question' => 'question',
+      'quiz_question' => 'question',
+      final type when type != null && type.isNotEmpty => type,
+      _ => 'document',
+    };
+  }
+
+  List<SyncRecord> _roadmapRecordsInDependencyOrder(List<SyncRecord> records) {
+    final byId = {for (final record in records) record.id: record};
+    final pending = List<SyncRecord>.from(records);
+    final ordered = <SyncRecord>[];
+    final insertedIds = <String>{};
+
+    while (pending.isNotEmpty) {
+      var progress = false;
+      for (var index = pending.length - 1; index >= 0; index--) {
+        final record = pending[index];
+        final parentId = _optionalString(record.values['parentId']);
+        if (parentId != null &&
+            byId.containsKey(parentId) &&
+            !insertedIds.contains(parentId)) {
+          continue;
+        }
+        ordered.add(record);
+        insertedIds.add(record.id);
+        pending.removeAt(index);
+        progress = true;
+      }
+      if (!progress) {
+        // Ciclos ou referências inválidas não devem travar toda a importação.
+        ordered.addAll(pending);
+        break;
+      }
+    }
+    return ordered;
+  }
 
   String? _optionalString(Object? value) {
     final string = value?.toString();
