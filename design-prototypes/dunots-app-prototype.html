@@ -1,0 +1,534 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta http-equiv="refresh" content="0; url=dunots-app-prototype-v2.html" />
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Dunots — Protótipo de reorganização</title>
+  <style>
+    :root {
+      --bg: #0B1316;
+      --surface: #122021;
+      --surface-raised: #17292A;
+      --surface-soft: #1A3030;
+      --line: rgba(226, 238, 230, .14);
+      --line-strong: rgba(226, 238, 230, .25);
+      --text: #F3F5EF;
+      --muted: #AAB6AE;
+      --emerald: #49D17D;
+      --mint: #A8D5BA;
+      --amber: #E8C56A;
+      --purple: #B9A1F5;
+      --danger: #FF8278;
+      --ink: #07100E;
+      --radius-xl: 26px;
+      --radius-lg: 18px;
+      --radius-md: 14px;
+      --shadow: 0 14px 34px rgba(0, 0, 0, .22);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 12% 0%, rgba(73, 209, 125, .10), transparent 28rem),
+        radial-gradient(circle at 94% 90%, rgba(185, 161, 245, .08), transparent 30rem),
+        #07100E;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    button, input, textarea, select { font: inherit; }
+    button { cursor: pointer; }
+    button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 3px solid rgba(168, 213, 186, .75); outline-offset: 2px; }
+
+    .prototype-shell {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: minmax(260px, 1fr) minmax(320px, 430px) minmax(260px, 1fr);
+      gap: 44px;
+      align-items: center;
+      padding: 42px;
+    }
+
+    .brief {
+      max-width: 340px;
+      color: var(--muted);
+      line-height: 1.55;
+    }
+    .brief h1 { color: var(--text); font-size: 29px; line-height: 1.08; margin: 0 0 12px; letter-spacing: -.04em; }
+    .brief p { margin: 0 0 18px; }
+    .brief .eyebrow { color: var(--emerald); font-weight: 750; font-size: 12px; letter-spacing: .11em; text-transform: uppercase; }
+    .brief ul { padding-left: 18px; margin: 14px 0 0; }
+    .brief li { margin: 7px 0; }
+
+    .phone {
+      position: relative;
+      height: min(900px, calc(100vh - 84px));
+      min-height: 650px;
+      overflow: hidden;
+      background: var(--bg);
+      border: 1px solid rgba(255, 255, 255, .17);
+      border-radius: 34px;
+      box-shadow: 0 32px 80px rgba(0, 0, 0, .45), inset 0 1px rgba(255,255,255,.08);
+    }
+    .phone::before {
+      content: "";
+      display: block;
+      height: 26px;
+      background: #081113;
+      border-bottom: 1px solid rgba(255,255,255,.05);
+    }
+
+    #app { height: calc(100% - 26px); display: flex; flex-direction: column; }
+    .app-header {
+      min-height: 76px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 18px 22px 11px;
+      background: rgba(11, 19, 22, .94);
+      backdrop-filter: blur(16px);
+      z-index: 3;
+    }
+    .header-title { display: flex; align-items: center; min-width: 0; gap: 11px; }
+    .header-title h2 { font-size: 21px; margin: 0; letter-spacing: -.03em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .header-icon { color: var(--emerald); display: grid; place-items: center; }
+    .icon-button {
+      height: 42px; width: 42px; border: 0; border-radius: 13px; display: grid; place-items: center;
+      color: var(--text); background: transparent;
+    }
+    .icon-button:hover { background: var(--surface-raised); }
+    .icon-button.subtle { color: var(--muted); }
+    .bell { position: relative; }
+    .bell[data-due="true"]::after { content: ""; position: absolute; width: 8px; height: 8px; border-radius: 99px; background: var(--amber); top: 8px; right: 8px; box-shadow: 0 0 0 2px var(--bg); }
+
+    .screen { flex: 1; overflow-y: auto; padding: 8px 20px 112px; scrollbar-width: none; }
+    .screen::-webkit-scrollbar { display: none; }
+    .screen-title { margin: 12px 0 22px; }
+    .screen-title h1 { font-size: 30px; line-height: 1.08; letter-spacing: -.045em; margin: 0 0 7px; }
+    .screen-title p { margin: 0; color: var(--muted); font-size: 15px; line-height: 1.45; }
+
+    .section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 27px 0 12px; }
+    .section-head h3 { font-size: 16px; letter-spacing: -.01em; margin: 0; }
+    .text-button { color: var(--mint); background: none; border: 0; font-weight: 750; padding: 7px 0; }
+    .meta { color: var(--muted); font-size: 13px; }
+
+    .primary-button, .secondary-button, .quiet-button {
+      min-height: 48px; border-radius: 15px; border: 0; font-weight: 800; letter-spacing: -.01em; display: inline-flex; align-items: center; justify-content: center; gap: 9px; padding: 0 18px;
+    }
+    .primary-button { background: var(--emerald); color: #092313; box-shadow: 0 8px 20px rgba(73, 209, 125, .18); }
+    .primary-button:hover { filter: brightness(1.06); transform: translateY(-1px); }
+    .secondary-button { color: var(--text); background: var(--surface-raised); border: 1px solid var(--line-strong); }
+    .quiet-button { color: var(--mint); background: none; padding-inline: 8px; }
+    .wide { width: 100%; }
+
+    .next-action {
+      position: relative; overflow: hidden; background: linear-gradient(135deg, #153C2A, #122B23); border: 1px solid rgba(73, 209, 125, .35); padding: 19px; border-radius: var(--radius-lg); box-shadow: var(--shadow);
+    }
+    .next-action::after { content: ""; position: absolute; width: 140px; height: 140px; background: radial-gradient(circle, rgba(168,213,186,.16), transparent 68%); right: -42px; top: -62px; }
+    .eyebrow-line { position: relative; z-index: 1; display: flex; align-items: center; gap: 8px; color: var(--mint); font-size: 12px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+    .next-action h3 { position: relative; z-index: 1; margin: 11px 0 4px; font-size: 21px; letter-spacing: -.035em; }
+    .next-action p { position: relative; z-index: 1; color: #C6D8CC; margin: 0 0 16px; font-size: 14px; }
+    .next-action .primary-button { position: relative; z-index: 1; min-height: 44px; width: 100%; }
+
+    .summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; }
+    .metric { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-md); padding: 13px 11px; min-height: 76px; }
+    .metric strong { display: block; font-size: 19px; letter-spacing: -.04em; margin-bottom: 4px; }
+    .metric span { display: block; color: var(--muted); line-height: 1.15; font-size: 11px; }
+    .metric.mint strong { color: var(--mint); }
+    .metric.amber strong { color: var(--amber); }
+    .metric.purple strong { color: var(--purple); }
+
+    .continue-row, .study-row, .question-row, .roadmap-row {
+      width: 100%; color: inherit; text-align: left; border: 1px solid var(--line); background: var(--surface); border-radius: var(--radius-md); display: flex; align-items: center; gap: 12px; padding: 14px; margin: 9px 0;
+    }
+    .continue-row:hover, .study-row:hover, .question-row:hover, .roadmap-row:hover { background: var(--surface-raised); border-color: var(--line-strong); }
+    .row-icon { width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center; flex: none; background: rgba(73, 209, 125, .12); color: var(--mint); }
+    .row-main { min-width: 0; flex: 1; }
+    .row-title { font-weight: 800; font-size: 14px; letter-spacing: -.015em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .row-subtitle { color: var(--muted); font-size: 12px; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .chevron { color: var(--muted); flex: none; }
+
+    .bottom-nav {
+      position: absolute; inset: auto 0 0; height: 78px; display: grid; grid-template-columns: repeat(4, 1fr); background: rgba(18, 32, 33, .98); border-top: 1px solid var(--line); padding: 7px 8px calc(7px + env(safe-area-inset-bottom)); z-index: 4;
+    }
+    .nav-item { min-width: 0; border: 0; background: none; color: #AAB6AE; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; border-radius: 12px; font-size: 11px; }
+    .nav-item svg { height: 21px; width: 21px; }
+    .nav-item.active { color: var(--mint); background: linear-gradient(180deg, rgba(73,209,125,.12), transparent); }
+    .nav-item.active::before { content: ""; width: 22px; height: 3px; border-radius: 99px; background: var(--emerald); position: absolute; margin-top: -47px; }
+
+    .search-row { display: flex; gap: 9px; margin: 2px 0 15px; }
+    .search {
+      flex: 1; min-height: 48px; display: flex; align-items: center; gap: 10px; background: var(--surface); border: 1px solid var(--line-strong); border-radius: 14px; padding: 0 13px; color: var(--muted);
+    }
+    .search input { color: var(--text); background: none; border: 0; width: 100%; min-width: 0; outline: 0; }
+    .filter-button { flex: none; width: 48px; min-height: 48px; border: 1px solid rgba(232,197,106,.32); background: rgba(232,197,106,.10); color: var(--amber); border-radius: 14px; display: grid; place-items: center; }
+
+    .segmented { display: flex; overflow-x: auto; gap: 7px; padding-bottom: 2px; scrollbar-width: none; }
+    .segmented::-webkit-scrollbar { display: none; }
+    .segment { white-space: nowrap; min-height: 35px; border-radius: 10px; padding: 0 12px; border: 1px solid var(--line); background: var(--surface); color: var(--muted); font-size: 12px; font-weight: 750; }
+    .segment.active { color: #0B2113; border-color: transparent; background: var(--mint); }
+
+    .study-card { border: 1px solid var(--line); background: var(--surface); border-radius: var(--radius-lg); padding: 15px; margin: 10px 0; }
+    .study-card-top { display: flex; gap: 12px; align-items: flex-start; }
+    .study-card .row-main { padding-top: 2px; }
+    .more-button { width: 32px; height: 32px; padding: 0; background: none; border: 0; color: var(--muted); border-radius: 9px; display: grid; place-items: center; }
+    .more-button:hover { background: var(--surface-raised); color: var(--text); }
+    .study-card .answer { color: var(--muted); font-size: 13px; margin: 10px 0 0 50px; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .status-line { margin: 12px 0 0 50px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .status-line span { color: var(--muted); font-size: 11px; }
+    .status-chip { border-radius: 8px; padding: 4px 7px; font-size: 10px; font-weight: 850; white-space: nowrap; }
+    .status-chip.due { color: #221A04; background: var(--amber); }
+    .status-chip.done { color: #0C2214; background: var(--mint); }
+    .status-chip.new { color: #100E22; background: var(--purple); }
+
+    .question-row { align-items: flex-start; padding: 15px; }
+    .question-number { width: 28px; height: 28px; border-radius: 9px; display: grid; place-items: center; color: var(--amber); background: rgba(232,197,106,.11); font-size: 12px; font-weight: 850; flex: none; }
+    .question-row p { color: var(--muted); font-size: 12px; line-height: 1.35; margin: 6px 0 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .question-meta { margin-top: 9px; display: flex; gap: 7px; align-items: center; color: var(--muted); font-size: 11px; }
+    .tiny-dot { width: 7px; height: 7px; border-radius: 99px; display: inline-block; flex: none; }
+
+    .roadmap-overview { display: flex; align-items: center; gap: 15px; background: var(--surface); border: 1px solid var(--line); padding: 15px; border-radius: var(--radius-lg); }
+    .progress-ring { --percent: 3; position: relative; width: 56px; height: 56px; border-radius: 99px; background: conic-gradient(var(--mint) calc(var(--percent) * 1%), rgba(168,213,186,.14) 0); display: grid; place-items: center; flex: none; }
+    .progress-ring::after { content: ""; position: absolute; inset: 5px; background: var(--surface); border-radius: inherit; }
+    .progress-ring strong { position: relative; z-index: 1; color: var(--text); font-size: 14px; }
+    .roadmap-overview h3 { font-size: 15px; margin: 0 0 4px; letter-spacing: -.02em; }
+    .roadmap-overview p { margin: 0; color: var(--muted); font-size: 12px; }
+    .roadmap-row { position: relative; padding: 14px 38px 14px 13px; min-height: 70px; }
+    .roadmap-row .step-circle { width: 27px; height: 27px; border-radius: 99px; border: 2px solid #748A83; color: #748A83; display: grid; place-items: center; flex: none; font-size: 11px; font-weight: 800; }
+    .roadmap-row.done .step-circle { border-color: var(--mint); background: var(--mint); color: #0A2113; }
+    .roadmap-row.current { border-color: rgba(73,209,125,.48); background: linear-gradient(90deg, rgba(73,209,125,.09), var(--surface) 48%); }
+    .roadmap-row.current .step-circle { border-color: var(--emerald); color: var(--emerald); }
+    .roadmap-row .row-subtitle { margin-top: 5px; }
+    .priority-point { position: absolute; right: 15px; top: calc(50% - 4px); width: 8px; height: 8px; border-radius: 99px; }
+    .priority-point.amber { background: var(--amber); box-shadow: 0 0 0 4px rgba(232,197,106,.10); }
+    .priority-point.emerald { background: var(--emerald); box-shadow: 0 0 0 4px rgba(73,209,125,.10); }
+    .priority-point.purple { background: var(--purple); box-shadow: 0 0 0 4px rgba(185,161,245,.10); }
+    .progress-rule { height: 5px; background: rgba(168,213,186,.13); border-radius: 99px; overflow: hidden; margin-top: 10px; }
+    .progress-rule span { display: block; height: 100%; border-radius: inherit; background: var(--mint); }
+
+    .empty-state { border: 1px dashed rgba(168,213,186,.35); background: rgba(18,32,33,.58); padding: 23px 18px; text-align: center; border-radius: var(--radius-lg); }
+    .empty-state .empty-icon { margin: 0 auto 10px; width: 42px; height: 42px; background: rgba(73,209,125,.12); color: var(--mint); border-radius: 13px; display: grid; place-items: center; }
+    .empty-state h3 { font-size: 15px; margin: 0 0 5px; }
+    .empty-state p { font-size: 13px; color: var(--muted); margin: 0 0 15px; line-height: 1.4; }
+
+    .modal-layer { display: none; position: absolute; inset: 0; z-index: 10; background: rgba(2, 6, 7, .67); backdrop-filter: blur(5px); padding: 22px; align-items: flex-end; }
+    .modal-layer.open { display: flex; }
+    .sheet { width: 100%; max-height: min(710px, calc(100% - 24px)); overflow-y: auto; background: var(--surface); border: 1px solid var(--line-strong); border-radius: 25px 25px 19px 19px; box-shadow: 0 -18px 50px rgba(0,0,0,.35); padding: 11px 18px 19px; animation: rise .18s ease-out; }
+    .dialog { align-self: center; border-radius: 22px; }
+    @keyframes rise { from { transform: translateY(16px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    .grabber { width: 34px; height: 4px; border-radius: 99px; background: #6F8179; margin: 1px auto 19px; }
+    .modal-head { display: flex; align-items: start; justify-content: space-between; gap: 10px; margin-bottom: 18px; }
+    .modal-head h2 { font-size: 23px; letter-spacing: -.035em; margin: 0; }
+    .modal-head p { color: var(--muted); font-size: 13px; line-height: 1.45; margin: 7px 0 0; }
+    .modal-close { color: var(--muted); background: none; border: 0; width: 38px; height: 38px; display: grid; place-items: center; border-radius: 11px; }
+    .modal-close:hover { background: var(--surface-raised); color: var(--text); }
+    .field { margin: 13px 0; }
+    .field label { color: #D4DDD7; font-size: 12px; font-weight: 750; display: block; margin: 0 0 7px; }
+    .field label small { font-weight: 500; color: var(--muted); }
+    .field input, .field textarea, .field select { width: 100%; color: var(--text); background: #0E1A1B; border: 1px solid var(--line-strong); border-radius: 13px; padding: 13px; outline: none; min-height: 47px; }
+    .field textarea { min-height: 92px; resize: vertical; line-height: 1.42; }
+    .field input::placeholder, .field textarea::placeholder { color: #788780; }
+    .field input:focus, .field textarea:focus, .field select:focus { border-color: var(--emerald); }
+    .field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 11px; }
+    .optional-toggle { width: 100%; border: 0; padding: 12px 0 3px; display: flex; justify-content: space-between; color: var(--mint); background: none; font-weight: 750; }
+    .modal-actions { display: grid; grid-template-columns: 1fr 1.25fr; gap: 10px; margin-top: 20px; }
+    .notice { border-radius: 13px; padding: 12px; display: flex; align-items: flex-start; gap: 10px; color: #D1DFD5; background: rgba(168,213,186,.10); border: 1px solid rgba(168,213,186,.22); font-size: 12px; line-height: 1.4; }
+    .notice.amber { color: #F0E1B7; background: rgba(232,197,106,.10); border-color: rgba(232,197,106,.24); }
+
+    .notification { padding: 13px 0; border-bottom: 1px solid var(--line); display: flex; gap: 11px; }
+    .notification:last-child { border-bottom: 0; }
+    .notification-mark { height: 31px; width: 31px; border-radius: 10px; flex: none; display: grid; place-items: center; background: rgba(232,197,106,.12); color: var(--amber); }
+    .notification strong { font-size: 13px; display: block; margin-bottom: 3px; }
+    .notification p { font-size: 12px; line-height: 1.4; color: var(--muted); margin: 0; }
+
+    .sync-tabs { display: grid; grid-template-columns: repeat(4, 1fr); border-bottom: 1px solid var(--line); margin: 0 -2px 18px; }
+    .sync-tab { color: var(--muted); border: 0; padding: 11px 3px; background: none; font-size: 11px; font-weight: 750; border-bottom: 3px solid transparent; }
+    .sync-tab.active { color: var(--mint); border-color: var(--emerald); }
+    .sync-panel { display: none; }
+    .sync-panel.active { display: block; }
+    .sync-stat-grid { display: grid; grid-template-columns: repeat(2,1fr); gap: 9px; margin: 16px 0; }
+    .sync-stat { padding: 13px; background: #0E1A1B; border: 1px solid var(--line); border-radius: 13px; }
+    .sync-stat strong { display: block; font-size: 18px; }
+    .sync-stat span { font-size: 11px; color: var(--muted); }
+
+    .toast { position: absolute; z-index: 20; left: 20px; right: 20px; bottom: 93px; border: 1px solid rgba(168,213,186,.35); background: #173326; color: #E5F3E9; border-radius: 13px; padding: 12px 14px; box-shadow: var(--shadow); display: none; font-size: 13px; }
+    .toast.show { display: block; animation: rise .18s ease-out; }
+
+    .right-panel { max-width: 350px; }
+    .right-panel h2 { font-size: 16px; margin: 0 0 14px; }
+    .rule { border: 0; border-top: 1px solid rgba(255,255,255,.11); margin: 19px 0; }
+    .color-list { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .color-token { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+    .swatch { width: 18px; height: 18px; border-radius: 6px; border: 1px solid rgba(255,255,255,.17); }
+
+    @media (max-width: 930px) {
+      .prototype-shell { grid-template-columns: 1fr; padding: 22px; gap: 22px; justify-items: center; }
+      .brief, .right-panel { max-width: 430px; width: 100%; }
+      .phone { width: min(430px, 100%); height: min(870px, calc(100vh - 44px)); }
+      .brief { order: -1; }
+    }
+    @media (max-width: 420px) {
+      .prototype-shell { padding: 0; }
+      .brief, .right-panel { display: none; }
+      .phone { width: 100%; height: 100vh; border-radius: 0; border: 0; min-height: 0; }
+      .phone::before { height: max(26px, env(safe-area-inset-top)); }
+    }
+  </style>
+</head>
+<body>
+  <main class="prototype-shell">
+    <section class="brief" aria-label="Objetivo do protótipo">
+      <p class="eyebrow">Dunots · protótipo navegável</p>
+      <h1>Uma mesa de estudo, não uma caixa de mensagens.</h1>
+      <p>Este preview reúne os fluxos prioritários em uma mesma linguagem: uma próxima ação clara, progresso legível e ferramentas secundárias fora do caminho.</p>
+      <ul>
+        <li>quatro destinos principais;</li>
+        <li>uma ação dominante por tela;</li>
+        <li>filtros, importações e sincronização por contexto;</li>
+        <li>cores com significado consistente.</li>
+      </ul>
+    </section>
+
+    <section class="phone" aria-label="Protótipo de aplicativo Dunots">
+      <div id="app"></div>
+      <div id="modalLayer" class="modal-layer" aria-live="polite"></div>
+      <div id="toast" class="toast" role="status"></div>
+    </section>
+
+    <aside class="brief right-panel" aria-label="Princípios visuais">
+      <h2>O que este protótipo testa</h2>
+      <p>Toque na navegação, botões, notificações, filtros, ações de cadastro e sincronização. Os dados são demonstrativos; o objetivo é validar organização e linguagem visual.</p>
+      <hr class="rule" />
+      <h2>Semântica de cor</h2>
+      <div class="color-list">
+        <span class="color-token"><i class="swatch" style="background:#49D17D"></i>Ação</span>
+        <span class="color-token"><i class="swatch" style="background:#A8D5BA"></i>Concluído</span>
+        <span class="color-token"><i class="swatch" style="background:#E8C56A"></i>Revisar</span>
+        <span class="color-token"><i class="swatch" style="background:#B9A1F5"></i>Especial</span>
+      </div>
+    </aside>
+  </main>
+
+  <script>
+    const icons = {
+      today: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M7.5 3v4M16.5 3v4M3.5 10h17M8 14h3M8 17h6"/></svg>',
+      cards: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M5 5.5 15.5 3 19 15.5 8.5 18z"/><path d="m8.5 18 2 3 10-2.8-3.2-11.4-1.8.5"/></svg>',
+      question: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M5 4h13a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z"/><path d="M8.3 9.2a3 3 0 1 1 5.1 2.15c-1.2 1.1-1.9 1.5-1.9 3.15M11.5 17h.01"/></svg>',
+      roadmap: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="5" cy="6" r="2.1"/><circle cx="19" cy="18" r="2.1"/><path d="M7.2 6h3.2a2 2 0 0 1 2 2v8a2 2 0 0 0 2 2h2.4M7 18h2"/></svg>',
+      bell: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg>',
+      search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="10.8" cy="10.8" r="6.7"/><path d="m16 16 4.3 4.3"/></svg>',
+      filter: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M4 7h16M7 12h10M10 17h4"/><circle cx="8" cy="7" r="1.5" fill="currentColor"/><circle cx="15" cy="12" r="1.5" fill="currentColor"/><circle cx="12" cy="17" r="1.5" fill="currentColor"/></svg>',
+      add: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>',
+      play: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="m8 5 11 7-11 7z"/></svg>',
+      arrow: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>',
+      dots: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.65"/><circle cx="12" cy="12" r="1.65"/><circle cx="19" cy="12" r="1.65"/></svg>',
+      check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m5 12 4.3 4.2L19 6.7"/></svg>',
+      clock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3.3 2"/></svg>',
+      sync: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 7v5h-5M4 17v-5h5M6 9a7 7 0 0 1 11.5-2M18 15a7 7 0 0 1-11.5 2"/></svg>',
+      upload: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M12 15V3m0 0L7.5 7.5M12 3l4.5 4.5M4 14v5a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"/></svg>',
+      download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M12 3v12m0 0 4.5-4.5M12 15l-4.5-4.5M4 14v5a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"/></svg>',
+      close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 6 12 12M18 6 6 18"/></svg>',
+      back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 18-6-6 6-6"/></svg>',
+      route: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="5" cy="5" r="2"/><circle cx="19" cy="19" r="2"/><path d="M7 5h3a3 3 0 0 1 3 3v5a3 3 0 0 0 3 3h1"/></svg>',
+      info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="12" r="9"/><path d="M12 10v6M12 7h.01"/></svg>'
+    };
+
+    const app = document.getElementById('app');
+    const modalLayer = document.getElementById('modalLayer');
+    const toast = document.getElementById('toast');
+    let activeScreen = 'today';
+    let activeFilter = 'Todos';
+
+    function icon(name) { return icons[name] || ''; }
+    function nav() {
+      const items = [ ['today','Hoje','today'], ['study','Estudar','cards'], ['questions','Questões','question'], ['roadmaps','Trilhas','roadmap'] ];
+      return `<nav class="bottom-nav" aria-label="Navegação principal">${items.map(([id,label,ic]) => `<button class="nav-item ${activeScreen === id ? 'active' : ''}" onclick="go('${id}')" aria-current="${activeScreen === id ? 'page' : 'false'}">${icon(ic)}<span>${label}</span></button>`).join('')}</nav>`;
+    }
+    function header(title, iconName, actions = '') {
+      return `<header class="app-header"><div class="header-title"><span class="header-icon">${icon(iconName)}</span><h2>${title}</h2></div><div style="display:flex;align-items:center;gap:2px">${actions}<button class="icon-button bell" data-due="true" aria-label="Abrir lembretes" onclick="openNotifications()">${icon('bell')}</button></div></header>`;
+    }
+    function screenTitle(title, subtitle) { return `<div class="screen-title"><h1>${title}</h1><p>${subtitle}</p></div>`; }
+    function emptyState(iconName, title, copy, action, handler) { return `<div class="empty-state"><div class="empty-icon">${icon(iconName)}</div><h3>${title}</h3><p>${copy}</p><button class="secondary-button" onclick="${handler}">${action}</button></div>`; }
+
+    function todayScreen() {
+      return `${header('Hoje', 'today', `<button class="icon-button subtle" aria-label="Ferramentas do aplicativo" onclick="openAppActions()">${icon('dots')}</button>`)}
+        <main class="screen">
+          ${screenTitle('Seu estudo, em foco.', 'Uma ação clara para continuar hoje.')}
+          <section class="next-action">
+            <div class="eyebrow-line">${icon('play')} Próxima ação</div>
+            <h3>Revisar 3 flashcards</h3>
+            <p>2 vencidos e 1 novo aguardam você.</p>
+            <button class="primary-button" onclick="go('study')">${icon('play')} Estudar agora</button>
+          </section>
+          <div class="section-head"><h3>Resumo de hoje</h3><button class="text-button" onclick="openNotifications()">Ver lembretes</button></div>
+          <section class="summary-grid" aria-label="Resumo de estudo">
+            <div class="metric amber"><strong>3</strong><span>revisões<br>pendentes</span></div>
+            <div class="metric mint"><strong>8</strong><span>itens<br>concluídos</span></div>
+            <div class="metric purple"><strong>25</strong><span>minutos<br>estudados</span></div>
+          </section>
+          <div class="section-head"><h3>Continue de onde parou</h3><button class="text-button" onclick="go('roadmaps')">Trilhas</button></div>
+          <button class="continue-row" onclick="openRoadmapDetail()">
+            <span class="row-icon">${icon('roadmap')}</span><span class="row-main"><span class="row-title">Transpetro — Análise de sistemas</span><span class="row-subtitle">Modelo OSI · próximo tópico</span></span><span class="chevron">${icon('arrow')}</span>
+          </button>
+          <div class="section-head"><h3>Fases de estudo</h3><button class="text-button" onclick="openPhase()">Criar fase</button></div>
+          ${emptyState('route', 'Organize uma fase de estudo', 'Agrupe cards e tópicos para seguir um plano.', 'Criar fase', 'openPhase()')}
+        </main>${nav()}`;
+    }
+
+    function studyScreen() {
+      const cards = [
+        ['O que é independência de dados?', 'Capacidade de alterar um nível sem afetar os demais.', 'Vencido', 'due'],
+        ['Como funciona o protocolo TCP?', 'É orientado à conexão e entrega dados de forma confiável.', 'Novo', 'new'],
+        ['Em qual camada atua um roteador?', 'Na camada de rede do modelo OSI.', 'Revisado', 'done']
+      ];
+      return `${header('Estudar', 'cards', `<button class="icon-button subtle" aria-label="Mais ações" onclick="openStudyActions()">${icon('dots')}</button>`)}
+      <main class="screen">
+        ${screenTitle('Flashcards', 'Revisão espaçada, sem distrações.')}
+        <section class="next-action">
+          <div class="eyebrow-line">${icon('clock')} Sessão de hoje</div>
+          <h3>3 cards para revisar</h3>
+          <p>Comece pelos vencidos e mantenha seu ritmo.</p>
+          <button class="primary-button" onclick="startStudy()">${icon('play')} Estudar 3 cards</button>
+        </section>
+        <div class="section-head"><h3>Seus cards</h3><button class="text-button" onclick="openCardForm()">${icon('add')} Novo</button></div>
+        <div class="segmented">${['Todos','Vencidos','Novos','Difíceis','Revisados'].map(x => `<button class="segment ${activeFilter === x ? 'active' : ''}" onclick="setStudyFilter('${x}')">${x}</button>`).join('')}</div>
+        <div style="margin-top:13px">${cards.map(([q,a,s,c]) => `<article class="study-card"><div class="study-card-top"><span class="row-icon">${icon('cards')}</span><span class="row-main"><span class="row-title">${q}</span><span class="row-subtitle">Flashcard de Redes</span></span><button class="more-button" aria-label="Ações do card" onclick="showToast('Ações do card: editar, excluir ou mover para uma fase.')">${icon('dots')}</button></div><p class="answer">${a}</p><div class="status-line"><span>Revisão agendada para hoje</span><b class="status-chip ${c}">${s}</b></div></article>`).join('')}</div>
+      </main>${nav()}`;
+    }
+
+    function questionsScreen() {
+      const questions = [
+        ['01','Qual é o número de hosts válidos em uma sub-rede /23?', 'Banca CESPE · Redes de computadores', 'Correta', 'done'],
+        ['02','A respeito do modelo OSI, assinale a alternativa incorreta.', 'Transpetro 2025 · Análise de sistemas', 'Revisar', 'due'],
+        ['03','Qual protocolo opera na camada de transporte?', 'Questão avulsa · TCP/IP', 'Nova', 'new']
+      ];
+      return `${header('Questões', 'question', `<button class="icon-button subtle" aria-label="Criar questão" onclick="openQuestionForm()">${icon('add')}</button>`)}
+        <main class="screen">
+          ${screenTitle('Questões', 'Busque, resolva e acompanhe seu desempenho.')}
+          <div class="search-row"><label class="search">${icon('search')}<input aria-label="Buscar questões" placeholder="Buscar questões" /></label><button class="filter-button" aria-label="Abrir filtros" onclick="openQuestionFilters()">${icon('filter')}</button></div>
+          <section class="next-action">
+            <div class="eyebrow-line">${icon('play')} Prática recomendada</div>
+            <h3>10 questões de redes</h3>
+            <p>Você teve mais erros em modelo OSI esta semana.</p>
+            <button class="primary-button" onclick="showToast('Sessão de 10 questões iniciada.')">${icon('play')} Praticar agora</button>
+          </section>
+          <div class="section-head"><h3>Questões recentes</h3><button class="text-button" onclick="openQuestionActions()">Ações</button></div>
+          ${questions.map(([n,t,m,s,c]) => `<button class="question-row" onclick="openQuestionDetail('${n}')"><span class="question-number">${n}</span><span class="row-main"><span class="row-title">${t}</span><p>${m}</p><span class="question-meta"><span class="tiny-dot" style="background:var(--${c === 'done' ? 'mint' : c === 'due' ? 'amber' : 'purple'})"></span>${s}</span></span><span class="chevron">${icon('arrow')}</span></button>`).join('')}
+        </main>${nav()}`;
+    }
+
+    function roadmapsScreen() {
+      const tracks = [
+        ['Transpetro', '2/578 itens concluídos', 3, 'Em andamento', 'emerald'],
+        ['Direito administrativo', '12/86 itens concluídos', 14, 'Revisar', 'amber'],
+        ['Banco de dados', '32/48 itens concluídos', 67, 'Concluída em breve', 'purple']
+      ];
+      return `${header('Trilhas', 'roadmap', `<button class="icon-button subtle" aria-label="Importar trilha" onclick="openImportTrack()">${icon('upload')}</button><button class="icon-button subtle" aria-label="Nova trilha" onclick="openTrackForm()">${icon('add')}</button>`)}
+        <main class="screen">
+          ${screenTitle('Minhas trilhas', 'Continue de onde parou.')}
+          <section class="next-action">
+            <div class="eyebrow-line">${icon('route')} Continue agora</div>
+            <h3>Modelo OSI</h3>
+            <p>Transpetro · 0 de 12 itens concluídos</p>
+            <button class="primary-button" onclick="openRoadmapDetail()">${icon('play')} Abrir próximo tópico</button>
+          </section>
+          <div class="section-head"><h3>Suas trilhas</h3><button class="text-button" onclick="openTrackForm()">${icon('add')} Nova</button></div>
+          ${tracks.map(([t,m,p,s,c]) => `<button class="roadmap-row" onclick="openRoadmapDetail()"><span class="progress-ring" style="--percent:${p}"><strong>${p}%</strong></span><span class="row-main"><span class="row-title">${t}</span><span class="row-subtitle">${m}</span><span class="row-subtitle" style="color:var(--${c === 'emerald' ? 'mint' : c});font-weight:750">${s}</span></span><span class="priority-point ${c}"></span></button>`).join('')}
+        </main>${nav()}`;
+    }
+
+    function render() {
+      const screens = {today: todayScreen, study: studyScreen, questions: questionsScreen, roadmaps: roadmapsScreen};
+      app.innerHTML = screens[activeScreen]();
+    }
+    function go(screen) { activeScreen = screen; render(); }
+    function setStudyFilter(filter) { activeFilter = filter; render(); }
+
+    function modal(content, kind = 'sheet') { modalLayer.innerHTML = `<section class="sheet ${kind}" role="dialog" aria-modal="true">${content}</section>`; modalLayer.classList.add('open'); }
+    function closeModal() { modalLayer.classList.remove('open'); modalLayer.innerHTML = ''; }
+    modalLayer.addEventListener('click', event => { if (event.target === modalLayer) closeModal(); });
+    function showToast(message) { toast.textContent = message; toast.classList.add('show'); setTimeout(() => toast.classList.remove('show'), 2800); }
+
+    function openNotifications() {
+      modal(`<div class="grabber"></div><div class="modal-head"><div><h2>Lembretes</h2><p>Seu plano para hoje, sem ocupar a página inicial.</p></div><button class="modal-close" onclick="closeModal()">${icon('close')}</button></div>
+        <div class="notification"><span class="notification-mark">${icon('cards')}</span><div><strong>3 cards aguardam revisão</strong><p>Comece pelos dois cards vencidos para manter a sequência.</p></div></div>
+        <div class="notification"><span class="notification-mark">${icon('clock')}</span><div><strong>Lembrete às 19:00</strong><p>Você configurou um horário diário de estudo.</p></div></div>
+        <div class="notice amber" style="margin-top:15px">${icon('info')} Você decide se quer receber um lembrete. Não há notificações simulando mensagens não lidas.</div>
+        <div class="modal-actions"><button class="secondary-button" onclick="showToast('Horário de lembrete aberto.');closeModal()">Configurar</button><button class="primary-button" onclick="go('study');closeModal()">Revisar agora</button></div>`);
+    }
+
+    function openAppActions() {
+      modal(`<div class="grabber"></div><div class="modal-head"><div><h2>Ferramentas</h2><p>Recursos do aplicativo que não precisam ficar na navegação principal.</p></div><button class="modal-close" onclick="closeModal()">${icon('close')}</button></div>
+        <button class="continue-row" onclick="openSync()"><span class="row-icon">${icon('sync')}</span><span class="row-main"><span class="row-title">Sincronizar dados</span><span class="row-subtitle">QR Code, pacotes e backups</span></span>${icon('arrow')}</button>
+        <button class="continue-row" onclick="showToast('Configurações abertas.');closeModal()"><span class="row-icon">${icon('filter')}</span><span class="row-main"><span class="row-title">Configurações</span><span class="row-subtitle">Aparência, lembretes e preferências</span></span>${icon('arrow')}</button>`);
+    }
+
+    function openStudyActions() { modal(`<div class="grabber"></div><div class="modal-head"><div><h2>Flashcards</h2><p>Ferramentas que não precisam ocupar a tela principal.</p></div><button class="modal-close" onclick="closeModal()">${icon('close')}</button></div><button class="continue-row" onclick="showToast('Abrindo progresso de revisão.');closeModal()"><span class="row-icon">${icon('route')}</span><span class="row-main"><span class="row-title">Progresso</span><span class="row-subtitle">Metas e sequência de revisão</span></span>${icon('arrow')}</button><button class="continue-row" onclick="showToast('Abrindo histórico de revisões.');closeModal()"><span class="row-icon">${icon('clock')}</span><span class="row-main"><span class="row-title">Histórico</span><span class="row-subtitle">Respostas e desempenho</span></span>${icon('arrow')}</button><button class="continue-row" onclick="showToast('Configuração de revisão aberta.');closeModal()"><span class="row-icon">${icon('filter')}</span><span class="row-main"><span class="row-title">Configurar revisão</span><span class="row-subtitle">Quantidade, ordem e horário</span></span>${icon('arrow')}</button>`); }
+
+    function openCardForm() {
+      modal(`<div class="grabber"></div><div class="modal-head"><div><h2>Novo flashcard</h2><p>Comece pelo essencial. Vínculos ficam depois do conteúdo.</p></div><button class="modal-close" onclick="closeModal()">${icon('close')}</button></div>
+      <div class="field"><label>Pergunta</label><textarea placeholder="Frente do flashcard"></textarea></div><div class="field"><label>Resposta</label><textarea placeholder="Resposta fácil de revisar"></textarea></div>
+      <button class="optional-toggle" onclick="toggleOptional('cardOptional')">Vincular questões ou materiais <span>⌄</span></button><div id="cardOptional" hidden><div class="field"><label>Buscar vínculo <small>(opcional)</small></label><input placeholder="Ex.: Questões de TCP/IP" /></div></div>
+      <div class="modal-actions"><button class="secondary-button" onclick="closeModal()">Cancelar</button><button class="primary-button" onclick="createCard()">Criar card</button></div>`);
+    }
+    function createCard() { closeModal(); showToast('Flashcard criado e adicionado à lista.'); }
+    function toggleOptional(id) { const el = document.getElementById(id); el.hidden = !el.hidden; }
+
+    function openQuestionFilters() {
+      modal(`<div class="grabber"></div><div class="modal-head"><div><h2>Filtrar questões</h2><p>A busca fica na tela. Aqui entram só os filtros avançados.</p></div><button class="modal-close" onclick="closeModal()">${icon('close')}</button></div>
+      <div class="field"><label>Prova ou vaga</label><select><option>Todas</option><option>Transpetro 2025</option><option>Questões avulsas</option></select></div><div class="field-grid"><div class="field"><label>Banca</label><select><option>Todas</option><option>CESPE</option></select></div><div class="field"><label>Ano</label><select><option>Todos</option><option>2025</option></select></div></div><div class="field"><label>Assunto</label><select><option>Todos</option><option>Redes</option><option>Banco de dados</option></select></div>
+      <div class="modal-actions"><button class="secondary-button" onclick="showToast('Filtros limpos.');closeModal()">Limpar</button><button class="primary-button" onclick="showToast('Filtros aplicados.');closeModal()">Aplicar filtros</button></div>`);
+    }
+
+    function openQuestionActions() {
+      modal(`<div class="grabber"></div><div class="modal-head"><div><h2>Gerenciar questões</h2><p>Ações de importação e cadastro em massa fora da listagem principal.</p></div><button class="modal-close" onclick="closeModal()">${icon('close')}</button></div>
+      <button class="continue-row" onclick="openQuestionForm()"><span class="row-icon">${icon('add')}</span><span class="row-main"><span class="row-title">Nova questão</span><span class="row-subtitle">Cadastre uma questão individual</span></span>${icon('arrow')}</button>
+      <button class="continue-row" onclick="showToast('Importação em massa aberta.');closeModal()"><span class="row-icon">${icon('download')}</span><span class="row-main"><span class="row-title">Cadastro em massa</span><span class="row-subtitle">Cole questões e revise a prévia</span></span>${icon('arrow')}</button>
+      <button class="continue-row" onclick="showToast('Fluxo de importação de PDF aberto.');closeModal()"><span class="row-icon">${icon('upload')}</span><span class="row-main"><span class="row-title">Importar PDF</span><span class="row-subtitle">Provas e gabaritos</span></span>${icon('arrow')}</button>`);
+    }
+
+    function openQuestionForm() {
+      modal(`<div class="grabber"></div><div class="modal-head"><div><h2>Nova questão</h2><p>Cadastre o enunciado primeiro. O vínculo com prova é uma escolha simples.</p></div><button class="modal-close" onclick="closeModal()">${icon('close')}</button></div>
+        <div class="field"><label>Prova <small>(opcional)</small></label><select><option>Questão avulsa</option><option>Transpetro 2025 — Analista</option></select></div><div class="field"><label>Enunciado</label><textarea placeholder="Digite ou cole o enunciado da questão"></textarea></div><div class="field"><label>Alternativas</label><textarea placeholder="A) ...\nB) ...\nC) ..."></textarea></div><div class="field-grid"><div class="field"><label>Gabarito</label><select><option>Selecione</option><option>A</option><option>B</option><option>C</option></select></div><div class="field"><label>Assunto <small>(opcional)</small></label><input placeholder="Ex.: Redes" /></div></div>
+        <div class="modal-actions"><button class="secondary-button" onclick="closeModal()">Cancelar</button><button class="primary-button" onclick="closeModal();showToast('Questão criada e vinculada à prova escolhida.')">Salvar questão</button></div>`);
+    }
+    function openQuestionDetail(n) { modal(`<div class="grabber"></div><div class="modal-head"><div><h2>Questão ${n}</h2><p>Transpetro 2025 · Redes de computadores</p></div><button class="modal-close" onclick="closeModal()">${icon('close')}</button></div><div class="notice">${icon('info')} A tela de resolução ocuparia este espaço com o enunciado, alternativas e feedback.</div><div class="modal-actions"><button class="secondary-button" onclick="closeModal()">Fechar</button><button class="primary-button" onclick="showToast('Sessão iniciada.');closeModal()">Resolver</button></div>`); }
+
+    function openTrackForm() {
+      modal(`<div class="grabber"></div><div class="modal-head"><div><h2>Nova trilha</h2><p>Crie uma trilha simples ou adicione etapas em massa.</p></div><button class="modal-close" onclick="closeModal()">${icon('close')}</button></div>
+        <div class="segmented"><button class="segment active">Criar trilha</button><button class="segment" onclick="showToast('A aba de criação em massa abriria aqui.')">Em massa</button></div>
+        <div class="field"><label>Nome da trilha</label><input placeholder="Ex.: Transpetro" /></div><div class="field"><label>Descrição <small>(opcional)</small></label><textarea placeholder="O objetivo desta trilha"></textarea></div><div class="modal-actions"><button class="secondary-button" onclick="closeModal()">Cancelar</button><button class="primary-button" onclick="closeModal();showToast('Trilha criada.')">Criar trilha</button></div>`);
+    }
+    function openImportTrack() { modal(`<div class="grabber"></div><div class="modal-head"><div><h2>Importar trilha</h2><p>Use um arquivo ou cole etapas em massa.</p></div><button class="modal-close" onclick="closeModal()">${icon('close')}</button></div><button class="continue-row" onclick="showToast('Seletor de arquivo aberto.');closeModal()"><span class="row-icon">${icon('upload')}</span><span class="row-main"><span class="row-title">Importar arquivo</span><span class="row-subtitle">Trilha exportada do Dunots</span></span>${icon('arrow')}</button><button class="continue-row" onclick="showToast('Criação em massa aberta.');closeModal()"><span class="row-icon">${icon('download')}</span><span class="row-main"><span class="row-title">Colar etapas</span><span class="row-subtitle">Use o formato de criação em massa</span></span>${icon('arrow')}</button>`); }
+    function openPhase() { modal(`<div class="grabber"></div><div class="modal-head"><div><h2>Nova fase de estudo</h2><p>Agrupe cards e etapas para estudar com intenção.</p></div><button class="modal-close" onclick="closeModal()">${icon('close')}</button></div><div class="field"><label>Nome da fase</label><input placeholder="Ex.: Fundamentos de redes" /></div><div class="notice">${icon('info')} Depois de criar, você escolhe quais flashcards e tópicos pertencem a esta fase.</div><div class="modal-actions"><button class="secondary-button" onclick="closeModal()">Cancelar</button><button class="primary-button" onclick="closeModal();showToast('Fase criada.')">Criar fase</button></div>`); }
+
+    function openRoadmapDetail() {
+      modal(`<div class="grabber"></div><div class="modal-head"><div><h2>Transpetro</h2><p>Parte 1 · Ênfase — Análise de sistemas</p></div><button class="modal-close" onclick="closeModal()">${icon('close')}</button></div>
+        <section class="roadmap-overview"><span class="progress-ring" style="--percent:3"><strong>3%</strong></span><div><h3>17 de 578 itens</h3><p>Seu próximo tópico é Modelo OSI.</p><div class="progress-rule"><span style="width:3%"></span></div></div></section>
+        <div class="section-head"><h3>Etapas</h3><button class="text-button" onclick="showToast('Opções de ordenação abertas.')">Ordenar</button></div>
+        <button class="roadmap-row done" onclick="showToast('Introdução marcada como concluída.')"><span class="step-circle">${icon('check')}</span><span class="row-main"><span class="row-title">Introdução à análise de sistemas</span><span class="row-subtitle">8/8 itens concluídos</span></span><b class="status-chip done">Concluído</b></button>
+        <button class="roadmap-row current" onclick="showToast('Abrindo Modelo OSI.')"><span class="step-circle">02</span><span class="row-main"><span class="row-title">Redes de computadores</span><span class="row-subtitle">Modelo OSI · próximo tópico</span></span><b class="status-chip new" style="background:#355A91;color:#E3ECFF">Em andamento</b><span class="priority-point emerald"></span></button>
+        <button class="roadmap-row" onclick="showToast('Abrindo Banco de Dados.')"><span class="step-circle">03</span><span class="row-main"><span class="row-title">Banco de dados</span><span class="row-subtitle">2/18 itens concluídos</span></span><b class="status-chip" style="background:#354047;color:#E2E9E4">A fazer</b></button>
+        <button class="roadmap-row" onclick="showToast('Abrindo Segurança da Informação.')"><span class="step-circle">04</span><span class="row-main"><span class="row-title">Segurança da informação</span><span class="row-subtitle">4/16 itens · revisar depois</span></span><b class="status-chip due">Revisar</b><span class="priority-point amber"></span></button>
+        <button class="roadmap-row" onclick="showToast('Abrindo Programação.')"><span class="step-circle">05</span><span class="row-main"><span class="row-title">Programação</span><span class="row-subtitle">7/24 itens concluídos</span></span><b class="status-chip" style="background:#354047;color:#E2E9E4">A fazer</b><span class="priority-point purple"></span></button>`);
+    }
+
+    function openSync() {
+      modal(`<div class="grabber"></div><div class="modal-head"><div><h2>Sincronizar dados</h2><p>Envie, receba ou conecte seus dispositivos com segurança.</p></div><button class="modal-close" onclick="closeModal()">${icon('close')}</button></div>
+      <div class="sync-tabs"><button class="sync-tab active" onclick="switchSync('pair',this)">QR Code</button><button class="sync-tab" onclick="switchSync('export',this)">Exportar</button><button class="sync-tab" onclick="switchSync('import',this)">Importar</button><button class="sync-tab" onclick="switchSync('backup',this)">Backups</button></div>
+      <section class="sync-panel active" id="sync-pair"><div class="notice">${icon('sync')} Leia o QR Code gerado no Desktop ou cole o código de pareamento. A sessão expira e o token é de uso único.</div><div class="field"><label>Código de pareamento</label><input placeholder="Cole ou escaneie o código" /></div><button class="primary-button wide" onclick="showToast('Procurando outro dispositivo...')">${icon('download')} Receber do outro dispositivo</button></section>
+      <section class="sync-panel" id="sync-export"><div class="notice">${icon('upload')} Exporte um pacote .dunots para transferir seus dados.</div><button class="primary-button wide" onclick="showToast('Pacote .dunots preparado para exportação.')">${icon('upload')} Gerar pacote</button></section>
+      <section class="sync-panel" id="sync-import"><div class="sync-stat-grid"><div class="sync-stat"><strong>840</strong><span>novos registros</span></div><div class="sync-stat"><strong>2</strong><span>conflitos para revisar</span></div><div class="sync-stat"><strong>0</strong><span>exclusões</span></div><div class="sync-stat"><strong>2</strong><span>indisponíveis</span></div></div><button class="primary-button wide" onclick="showToast('Prévia de mesclagem aberta.')">Revisar e aplicar</button></section>
+      <section class="sync-panel" id="sync-backup"><div class="notice amber">${icon('info')} Backups são criados antes de mesclar dados. A restauração é sempre uma ação explícita.</div><button class="secondary-button wide" style="margin-top:14px" onclick="showToast('Lista de backups aberta.')">Ver backups</button></section>`);
+    }
+    function switchSync(id, button) { document.querySelectorAll('.sync-tab').forEach(x => x.classList.remove('active')); document.querySelectorAll('.sync-panel').forEach(x => x.classList.remove('active')); button.classList.add('active'); document.getElementById('sync-' + id).classList.add('active'); }
+
+    document.addEventListener('keydown', event => { if (event.key === 'Escape') closeModal(); });
+    render();
+    window.go = go; window.setStudyFilter = setStudyFilter; window.openNotifications = openNotifications; window.openAppActions = openAppActions; window.openStudyActions = openStudyActions; window.openCardForm = openCardForm; window.createCard = createCard; window.toggleOptional = toggleOptional; window.openQuestionFilters = openQuestionFilters; window.openQuestionActions = openQuestionActions; window.openQuestionForm = openQuestionForm; window.openQuestionDetail = openQuestionDetail; window.openTrackForm = openTrackForm; window.openImportTrack = openImportTrack; window.openPhase = openPhase; window.openRoadmapDetail = openRoadmapDetail; window.openSync = openSync; window.switchSync = switchSync; window.closeModal = closeModal; window.showToast = showToast; window.startStudy = () => showToast('Sessão de revisão iniciada.');
+  </script>
+</body>
+</html>
