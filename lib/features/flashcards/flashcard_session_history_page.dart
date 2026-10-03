@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../app/dunots_theme.dart';
 import '../../core/models/flashcard_session_summary.dart';
 import '../../shared/widgets/study_widgets.dart';
 import 'data/flashcard_session_repository.dart';
@@ -45,28 +46,32 @@ class _FlashcardSessionHistoryPageState
           ),
         ],
       ),
-      body: FutureBuilder<List<FlashcardSessionSummary>>(
-        future: _sessionsFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done) {
-            return const StudyLoadingState(message: 'Carregando histórico...');
-          }
-          if (snapshot.hasError) {
-            return StudyErrorState(
-              message: 'Não foi possível carregar o histórico.',
-              onRetry: () => setState(_reload),
-            );
-          }
-          final sessions = snapshot.data ?? const [];
-          if (sessions.isEmpty) {
-            return const StudyEmptyState(
-              title: 'Nenhuma sessão no período.',
-              detail: 'Conclua uma revisão para começar seu histórico.',
-              icon: Icons.insights_outlined,
-            );
-          }
-          return _buildContent(sessions);
-        },
+      body: SafeArea(
+        child: FutureBuilder<List<FlashcardSessionSummary>>(
+          future: _sessionsFuture,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState != ConnectionState.done) {
+              return const StudyLoadingState(
+                message: 'Carregando histórico...',
+              );
+            }
+            if (snapshot.hasError) {
+              return StudyErrorState(
+                message: 'Não foi possível carregar o histórico.',
+                onRetry: () => setState(_reload),
+              );
+            }
+            final sessions = snapshot.data ?? const [];
+            if (sessions.isEmpty) {
+              return const StudyEmptyState(
+                title: 'Nenhuma sessão no período.',
+                detail: 'Conclua uma revisão para começar seu histórico.',
+                icon: Icons.insights_outlined,
+              );
+            }
+            return _buildContent(sessions);
+          },
+        ),
       ),
     );
   }
@@ -160,7 +165,7 @@ class _FlashcardSessionHistoryPageState
         label: label,
         value: value,
         icon: Icons.insights_outlined,
-        color: const Color(0xFF78B8FF),
+        color: DunotsColors.emerald,
       ),
     );
   }

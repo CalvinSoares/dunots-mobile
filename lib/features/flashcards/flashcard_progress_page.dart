@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../../app/dunots_theme.dart';
 import '../../core/models/flashcard_review_preferences.dart';
 import '../../core/models/flashcard_session_summary.dart';
+import '../../shared/widgets/dunots_modal.dart';
 import '../../shared/widgets/study_widgets.dart';
 import 'data/flashcard_review_preferences_repository.dart';
 import 'data/flashcard_session_repository.dart';
@@ -55,28 +57,32 @@ class _FlashcardProgressPageState extends State<FlashcardProgressPage> {
           ),
         ],
       ),
-      body: FutureBuilder<_ProgressData>(
-        future: _progressFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done) {
-            return const StudyLoadingState(message: 'Carregando progresso...');
-          }
-          if (snapshot.hasError) {
-            return StudyErrorState(
-              message: 'Não foi possível carregar o progresso.',
-              onRetry: () => setState(_reload),
-            );
-          }
-          final data = snapshot.data!;
-          if (data.sessions.isEmpty) {
-            return const StudyEmptyState(
-              title: 'Nenhum progresso no período.',
-              detail: 'Conclua uma revisão para acompanhar sua evolução.',
-              icon: Icons.trending_up_outlined,
-            );
-          }
-          return _buildContent(data);
-        },
+      body: SafeArea(
+        child: FutureBuilder<_ProgressData>(
+          future: _progressFuture,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState != ConnectionState.done) {
+              return const StudyLoadingState(
+                message: 'Carregando progresso...',
+              );
+            }
+            if (snapshot.hasError) {
+              return StudyErrorState(
+                message: 'Não foi possível carregar o progresso.',
+                onRetry: () => setState(_reload),
+              );
+            }
+            final data = snapshot.data!;
+            if (data.sessions.isEmpty) {
+              return const StudyEmptyState(
+                title: 'Nenhum progresso no período.',
+                detail: 'Conclua uma revisão para acompanhar sua evolução.',
+                icon: Icons.trending_up_outlined,
+              );
+            }
+            return _buildContent(data);
+          },
+        ),
       ),
     );
   }
@@ -144,7 +150,7 @@ class _FlashcardProgressPageState extends State<FlashcardProgressPage> {
           label: 'Fáceis',
           value: easy,
           total: classified,
-          color: Colors.green,
+          color: DunotsColors.mint,
         ),
         const SizedBox(height: 24),
         const Text(
@@ -163,6 +169,8 @@ class _FlashcardProgressPageState extends State<FlashcardProgressPage> {
                     value: report.currentPeriod.cards == 0
                         ? 0
                         : day.cards / report.currentPeriod.cards,
+                    color: DunotsColors.mint,
+                    backgroundColor: DunotsColors.border,
                     minHeight: 10,
                   ),
                 ),
@@ -192,7 +200,7 @@ class _FlashcardProgressPageState extends State<FlashcardProgressPage> {
                 Icon(
                   reached ? Icons.emoji_events_outlined : Icons.flag_outlined,
                   color: reached
-                      ? Colors.amber.shade700
+                      ? DunotsColors.amber
                       : Theme.of(context).colorScheme.primary,
                 ),
                 const SizedBox(width: 8),
@@ -215,7 +223,12 @@ class _FlashcardProgressPageState extends State<FlashcardProgressPage> {
                   : 'Esta semana: $completed/$goal cards revisados.',
             ),
             const SizedBox(height: 8),
-            LinearProgressIndicator(value: progress, minHeight: 10),
+            LinearProgressIndicator(
+              value: progress,
+              minHeight: 10,
+              color: DunotsColors.mint,
+              backgroundColor: DunotsColors.border,
+            ),
             const SizedBox(height: 8),
             Text(
               '${data.report.currentWeek.activeDays} dias ativos · '
@@ -238,7 +251,7 @@ class _FlashcardProgressPageState extends State<FlashcardProgressPage> {
     final changeColor = change == null || change == 0
         ? Theme.of(context).colorScheme.onSurfaceVariant
         : change > 0
-        ? Colors.green
+        ? DunotsColors.mint
         : Theme.of(context).colorScheme.error;
 
     return Card(
@@ -447,7 +460,7 @@ class _FlashcardProgressPageState extends State<FlashcardProgressPage> {
         label: label,
         value: value,
         icon: icon,
-        color: const Color(0xFF78B8FF),
+        color: DunotsColors.emerald,
       ),
     );
   }
@@ -471,7 +484,7 @@ class _FlashcardProgressPageState extends State<FlashcardProgressPage> {
                 Icon(
                   reached ? Icons.check_circle : Icons.flag_outlined,
                   color: reached
-                      ? Colors.green
+                      ? DunotsColors.mint
                       : Theme.of(context).colorScheme.primary,
                 ),
                 const SizedBox(width: 8),
@@ -494,7 +507,12 @@ class _FlashcardProgressPageState extends State<FlashcardProgressPage> {
                   : 'Hoje: $completed/$goal cards revisados.',
             ),
             const SizedBox(height: 8),
-            LinearProgressIndicator(value: progress, minHeight: 10),
+            LinearProgressIndicator(
+              value: progress,
+              minHeight: 10,
+              color: DunotsColors.mint,
+              backgroundColor: DunotsColors.border,
+            ),
           ],
         ),
       ),
@@ -502,7 +520,7 @@ class _FlashcardProgressPageState extends State<FlashcardProgressPage> {
   }
 
   Future<void> _changeDailyGoal(FlashcardReviewPreferences current) async {
-    final goal = await showDialog<int>(
+    final goal = await showDunotsDrawer<int>(
       context: context,
       builder: (_) => _DailyGoalDialog(currentGoal: current.dailyGoal),
     );
@@ -512,7 +530,7 @@ class _FlashcardProgressPageState extends State<FlashcardProgressPage> {
   }
 
   Future<void> _changeWeeklyGoal(FlashcardReviewPreferences current) async {
-    final goal = await showDialog<int>(
+    final goal = await showDunotsDrawer<int>(
       context: context,
       builder: (_) => _WeeklyGoalDialog(currentGoal: current.weeklyGoal),
     );
@@ -609,33 +627,26 @@ class _DailyGoalDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const options = [5, 10, 20, 50, 100];
-    return AlertDialog(
-      title: const Text('Definir meta diária'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Align(
-            alignment: Alignment.centerLeft,
-            child: Text('Escolha quantos cards quer revisar por dia.'),
-          ),
-          const SizedBox(height: 8),
-          RadioGroup<int>(
-            groupValue: currentGoal,
-            onChanged: (value) {
-              if (value != null) Navigator.of(context).pop(value);
-            },
-            child: Column(
-              children: options
-                  .map(
-                    (option) => RadioListTile<int>(
-                      value: option,
-                      title: Text('$option cards por dia'),
-                    ),
-                  )
-                  .toList(growable: false),
-            ),
-          ),
-        ],
+    return DunotsModal(
+      title: 'Definir meta diária',
+      subtitle: 'Escolha quantos cards quer revisar por dia.',
+      icon: Icons.today_outlined,
+      // ignore: sort_child_properties_last
+      child: RadioGroup<int>(
+        groupValue: currentGoal,
+        onChanged: (value) {
+          if (value != null) Navigator.of(context).pop(value);
+        },
+        child: Column(
+          children: options
+              .map(
+                (option) => RadioListTile<int>(
+                  value: option,
+                  title: Text('$option cards por dia'),
+                ),
+              )
+              .toList(growable: false),
+        ),
       ),
       actions: [
         TextButton(
@@ -655,33 +666,26 @@ class _WeeklyGoalDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const options = [25, 50, 100, 150, 200, 300];
-    return AlertDialog(
-      title: const Text('Definir meta semanal'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Align(
-            alignment: Alignment.centerLeft,
-            child: Text('Escolha quantos cards quer revisar por semana.'),
-          ),
-          const SizedBox(height: 8),
-          RadioGroup<int>(
-            groupValue: currentGoal,
-            onChanged: (value) {
-              if (value != null) Navigator.of(context).pop(value);
-            },
-            child: Column(
-              children: options
-                  .map(
-                    (option) => RadioListTile<int>(
-                      value: option,
-                      title: Text('$option cards por semana'),
-                    ),
-                  )
-                  .toList(growable: false),
-            ),
-          ),
-        ],
+    return DunotsModal(
+      title: 'Definir meta semanal',
+      subtitle: 'Escolha quantos cards quer revisar por semana.',
+      icon: Icons.date_range_outlined,
+      // ignore: sort_child_properties_last
+      child: RadioGroup<int>(
+        groupValue: currentGoal,
+        onChanged: (value) {
+          if (value != null) Navigator.of(context).pop(value);
+        },
+        child: Column(
+          children: options
+              .map(
+                (option) => RadioListTile<int>(
+                  value: option,
+                  title: Text('$option cards por semana'),
+                ),
+              )
+              .toList(growable: false),
+        ),
       ),
       actions: [
         TextButton(

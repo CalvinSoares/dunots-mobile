@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:dunots_mobile/core/models/flashcard.dart';
 import 'package:dunots_mobile/core/models/flashcard_session_summary.dart';
 
+import '../../app/dunots_theme.dart';
+import '../../shared/widgets/dunots_modal.dart';
 import '../../shared/widgets/study_widgets.dart';
 import '../questions/data/question_repository.dart';
 import '../questions/question_details_page.dart';
@@ -38,6 +40,7 @@ class _FlashcardStudyPageState extends State<FlashcardStudyPage> {
   late final DateTime _startedAt;
   int _currentIndex = 0;
   bool _answered = false;
+  bool _revealedWithoutAnswer = false;
   bool _finished = false;
   String? _feedback;
   final Map<String, int> _ratingCounts = {};
@@ -60,10 +63,12 @@ class _FlashcardStudyPageState extends State<FlashcardStudyPage> {
     if (widget.cards.isEmpty) {
       return Scaffold(
         appBar: AppBar(title: const Text('Revisão de flashcards')),
-        body: const StudyEmptyState(
-          title: 'Nenhum flashcard para revisar.',
-          detail: 'Cadastre um cartão antes de iniciar uma sessão.',
-          icon: Icons.style_outlined,
+        body: const SafeArea(
+          child: StudyEmptyState(
+            title: 'Nenhum flashcard para revisar.',
+            detail: 'Cadastre um cartão antes de iniciar uma sessão.',
+            icon: Icons.style_outlined,
+          ),
         ),
       );
     }
@@ -77,62 +82,74 @@ class _FlashcardStudyPageState extends State<FlashcardStudyPage> {
       appBar: AppBar(
         title: Text('Revisão · ${_currentIndex + 1}/${widget.cards.length}'),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            LinearProgressIndicator(
-              value:
-                  (_currentIndex + (_answered ? 1 : 0)) / widget.cards.length,
-            ),
-            const SizedBox(height: 24),
-            Text(
-              'Pergunta',
-              style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                color: Theme.of(context).colorScheme.primary,
-                fontWeight: FontWeight.w700,
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              LinearProgressIndicator(
+                value:
+                    (_currentIndex + (_answered ? 1 : 0)) / widget.cards.length,
+                color: DunotsColors.mint,
+                backgroundColor: DunotsColors.border,
               ),
-            ),
-            const SizedBox(height: 8),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(18),
-                child: Text(
-                  card.front,
-                  style: Theme.of(context).textTheme.titleLarge
-                      ?.copyWith(fontWeight: FontWeight.w700),
+              const SizedBox(height: 24),
+              Text(
+                'Pergunta',
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  color: Theme.of(context).colorScheme.primary,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
-            ),
-            const SizedBox(height: 24),
-            TextField(
-              controller: _answerController,
-              enabled: !_answered,
-              minLines: 2,
-              maxLines: 5,
-              textInputAction: TextInputAction.done,
-              onSubmitted: (_) => _checkAnswer(card),
-              decoration: InputDecoration(
-                labelText: 'Sua resposta',
-                hintText: 'Digite a resposta antes de conferir',
-                errorText: _feedback,
-                suffixIcon: _answered ? const Icon(Icons.check_circle) : null,
-              ),
-            ),
-            const SizedBox(height: 12),
-            if (!_answered)
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  onPressed: () => _checkAnswer(card),
-                  icon: const Icon(Icons.check),
-                  label: const Text('Conferir resposta'),
+              const SizedBox(height: 8),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(18),
+                  child: Text(
+                    card.front,
+                    style: Theme.of(context).textTheme.titleLarge
+                        ?.copyWith(fontWeight: FontWeight.w700),
+                  ),
                 ),
-              )
-            else
-              _buildAnswerResult(context, card),
-          ],
+              ),
+              const SizedBox(height: 24),
+              TextField(
+                controller: _answerController,
+                enabled: !_answered,
+                minLines: 2,
+                maxLines: 5,
+                textInputAction: TextInputAction.done,
+                onSubmitted: (_) => _checkAnswer(card),
+                decoration: InputDecoration(
+                  labelText: 'Sua resposta',
+                  hintText: 'Digite a resposta antes de conferir',
+                  errorText: _feedback,
+                  suffixIcon: _answered ? const Icon(Icons.check_circle) : null,
+                ),
+              ),
+              const SizedBox(height: 12),
+              if (!_answered)
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    FilledButton.icon(
+                      onPressed: () => _checkAnswer(card),
+                      icon: const Icon(Icons.check),
+                      label: const Text('Conferir resposta'),
+                    ),
+                    const SizedBox(height: 6),
+                    TextButton.icon(
+                      onPressed: _revealAnswer,
+                      icon: const Icon(Icons.visibility_outlined),
+                      label: const Text('Não lembro — ver resposta'),
+                    ),
+                  ],
+                )
+              else
+                _buildAnswerResult(context, card),
+            ],
+          ),
         ),
       ),
     );
@@ -143,16 +160,16 @@ class _FlashcardStudyPageState extends State<FlashcardStudyPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Card(
-          color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
+          color: DunotsColors.mint.withValues(alpha: 0.12),
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Resposta correta',
+                  _revealedWithoutAnswer ? 'Gabarito' : 'Resposta correta',
                   style: TextStyle(
-                    color: Theme.of(context).colorScheme.primary,
+                    color: DunotsColors.mint,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -163,6 +180,30 @@ class _FlashcardStudyPageState extends State<FlashcardStudyPage> {
           ),
         ),
         const SizedBox(height: 18),
+        if (_revealedWithoutAnswer) ...[
+          FilledButton.icon(
+            onPressed: () => _classify('difícil'),
+            icon: Icon(
+              _currentIndex == widget.cards.length - 1
+                  ? Icons.check
+                  : Icons.arrow_forward,
+            ),
+            label: Text(
+              _currentIndex == widget.cards.length - 1
+                  ? 'Concluir e marcar difícil'
+                  : 'Próximo card',
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Será registrado como difícil para aparecer novamente em breve.',
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 18),
+        ],
         const Text('Como foi?', style: TextStyle(fontWeight: FontWeight.w700)),
         const SizedBox(height: 10),
         if (card.linkedMaterialIds.isNotEmpty &&
@@ -205,42 +246,44 @@ class _FlashcardStudyPageState extends State<FlashcardStudyPage> {
   Widget _buildFinished(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Revisão concluída')),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.check_circle_outline,
-                size: 56,
-                color: Theme.of(context).colorScheme.primary,
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Sessão concluída',
-                style: Theme.of(context).textTheme.headlineSmall
-                    ?.copyWith(fontWeight: FontWeight.w800),
-              ),
-              const SizedBox(height: 8),
-              Text('${widget.cards.length} flashcards respondidos.'),
-              const SizedBox(height: 18),
-              Wrap(
-                alignment: WrapAlignment.center,
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  _summaryChip('Difíceis', _ratingCounts['difícil'] ?? 0),
-                  _summaryChip('Bons', _ratingCounts['bom'] ?? 0),
-                  _summaryChip('Fáceis', _ratingCounts['fácil'] ?? 0),
-                ],
-              ),
-              const SizedBox(height: 20),
-              FilledButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Voltar aos flashcards'),
-              ),
-            ],
+      body: SafeArea(
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.check_circle_outline,
+                  size: 56,
+                  color: DunotsColors.mint,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Sessão concluída',
+                  style: Theme.of(context).textTheme.headlineSmall
+                      ?.copyWith(fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 8),
+                Text('${widget.cards.length} flashcards respondidos.'),
+                const SizedBox(height: 18),
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    _summaryChip('Difíceis', _ratingCounts['difícil'] ?? 0),
+                    _summaryChip('Bons', _ratingCounts['bom'] ?? 0),
+                    _summaryChip('Fáceis', _ratingCounts['fácil'] ?? 0),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                FilledButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Voltar aos flashcards'),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -259,6 +302,17 @@ class _FlashcardStudyPageState extends State<FlashcardStudyPage> {
     setState(() {
       _feedback = null;
       _answered = true;
+      _revealedWithoutAnswer = false;
+    });
+  }
+
+  void _revealAnswer() {
+    if (_answered) return;
+    FocusManager.instance.primaryFocus?.unfocus();
+    setState(() {
+      _feedback = null;
+      _answered = true;
+      _revealedWithoutAnswer = true;
     });
   }
 
@@ -292,6 +346,7 @@ class _FlashcardStudyPageState extends State<FlashcardStudyPage> {
     setState(() {
       _currentIndex++;
       _answered = false;
+      _revealedWithoutAnswer = false;
       _feedback = null;
       _answerController.clear();
     });
@@ -329,13 +384,19 @@ class _FlashcardStudyPageState extends State<FlashcardStudyPage> {
         .where((material) => card.linkedMaterialIds.contains(material.id))
         .toList(growable: false);
     if (!mounted) return;
-    final selected = await showDialog<StudyMaterial>(
+    final selected = await showDunotsDrawer<StudyMaterial>(
       context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Materiais relacionados'),
-        content: SizedBox(
-          width: 520,
-          height: 360,
+      builder: (_) => DunotsModal(
+        title: 'Materiais relacionados',
+        subtitle: 'Escolha um material para abrir seus detalhes.',
+        icon: Icons.link_outlined,
+        scrollable: false,
+        // ignore: sort_child_properties_last
+        child: SizedBox(
+          width: double.infinity,
+          height: (MediaQuery.sizeOf(context).height * 0.46)
+              .clamp(220.0, 420.0)
+              .toDouble(),
           child: materials.isEmpty
               ? const Center(child: Text('Nenhum material disponível.'))
               : ListView.separated(
@@ -380,21 +441,6 @@ class _FlashcardStudyPageState extends State<FlashcardStudyPage> {
             ),
           );
         }
-      case StudyMaterialType.challenge:
-        if (!mounted) return;
-        await showDialog<void>(
-          context: context,
-          builder: (_) => AlertDialog(
-            title: Text(material.title),
-            content: Text(material.subtitle),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Fechar'),
-              ),
-            ],
-          ),
-        );
       case StudyMaterialType.flashcard:
         final repository = widget.repository;
         if (repository == null) return;
@@ -417,32 +463,18 @@ class _FlashcardStudyPageState extends State<FlashcardStudyPage> {
         }
       case StudyMaterialType.document:
         if (!mounted) return;
-        await showDialog<void>(
+        await showDunotsDrawer<void>(
           context: context,
-          builder: (_) => AlertDialog(
-            title: Text(material.title),
-            content: Text(material.subtitle),
+          builder: (_) => DunotsModal(
+            title: material.title,
+            icon: Icons.description_outlined,
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(context).pop(),
                 child: const Text('Fechar'),
               ),
             ],
-          ),
-        );
-      case StudyMaterialType.diagram:
-        if (!mounted) return;
-        await showDialog<void>(
-          context: context,
-          builder: (_) => AlertDialog(
-            title: Text(material.title),
-            content: Text(material.subtitle),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Fechar'),
-              ),
-            ],
+            child: Text(material.subtitle),
           ),
         );
     }
@@ -452,9 +484,7 @@ class _FlashcardStudyPageState extends State<FlashcardStudyPage> {
     return switch (type) {
       StudyMaterialType.flashcard => Icons.style_outlined,
       StudyMaterialType.question => Icons.quiz_outlined,
-      StudyMaterialType.challenge => Icons.code_outlined,
       StudyMaterialType.document => Icons.description_outlined,
-      StudyMaterialType.diagram => Icons.account_tree_outlined,
     };
   }
 }

@@ -7,14 +7,14 @@ import 'package:dunots_mobile/core/models/flashcard_review_preferences.dart';
 import 'package:dunots_mobile/core/models/flashcard_session_summary.dart';
 import 'package:dunots_mobile/features/questions/data/question_repository.dart';
 
+import '../../shared/widgets/dunots_modal.dart';
 import '../../shared/widgets/study_widgets.dart';
+import '../../app/dunots_theme.dart';
 import 'data/flashcard_repository.dart';
 import 'data/flashcard_review_preferences_repository.dart';
 import 'data/flashcard_session_repository.dart';
 import '../roadmaps/data/study_material_catalog_repository.dart';
 import '../roadmaps/domain/study_material.dart';
-import '../diagrams/data/diagram_repository.dart';
-import '../diagrams/domain/study_diagram.dart';
 import 'flashcard_form_dialog.dart';
 import 'flashcard_list_item.dart';
 import 'flashcard_progress_page.dart';
@@ -22,19 +22,19 @@ import 'flashcard_session_history_page.dart';
 import 'flashcard_study_page.dart';
 
 class FlashcardsPreviewPage extends StatefulWidget {
+  final bool showHeader;
   final FlashcardRepository? repository;
   final QuestionRepository? questionRepository;
   final FlashcardSessionRepository? sessionRepository;
   final FlashcardReviewPreferencesRepository? preferencesRepository;
-  final DiagramRepository? diagramRepository;
 
   const FlashcardsPreviewPage({
     super.key,
+    this.showHeader = true,
     this.repository,
     this.questionRepository,
     this.sessionRepository,
     this.preferencesRepository,
-    this.diagramRepository,
   });
 
   @override
@@ -45,6 +45,7 @@ class _FlashcardsPreviewPageState extends State<FlashcardsPreviewPage> {
   late final FlashcardRepository _repository;
   late final StudyMaterialCatalogRepository _materialRepository;
   late final Future<List<Flashcard>> _cardsFuture;
+  List<Flashcard>? _cardsCache;
   late final FlashcardSessionRepository _sessionRepository;
   late final FlashcardReviewPreferencesRepository _preferencesRepository;
   late Future<List<FlashcardSessionSummary>> _todaySessionsFuture;
@@ -80,30 +81,44 @@ class _FlashcardsPreviewPageState extends State<FlashcardsPreviewPage> {
 
   @override
   Widget build(BuildContext context) {
-    return PreviewPage(
-      icon: Icons.style_outlined,
-      title: 'Flashcards',
-      subtitle: 'A revisão espaçada vai morar aqui.',
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
       child: FutureBuilder<List<Flashcard>>(
         future: _cardsFuture,
         builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done) {
+          final cards = _cardsCache ?? snapshot.data;
+          if (snapshot.connectionState != ConnectionState.done &&
+              cards == null) {
             return const StudyLoadingState(message: 'Carregando flashcards...');
           }
 
-          if (snapshot.hasError) {
+          if (snapshot.hasError && cards == null) {
             return StudyErrorState(
               message: 'Não foi possível carregar os flashcards.',
               onRetry: () => setState(_reload),
             );
           }
 
-          final cards = snapshot.data ?? const [];
-          if (cards.isEmpty) {
+          if (cards == null) {
             return const StudyEmptyState(
               title: 'Nenhum flashcard cadastrado ainda.',
               detail: 'Cadastre um cartão para começar a revisar.',
               icon: Icons.style_outlined,
+            );
+          }
+
+          if (cards.isEmpty) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildTopActions(),
+                const SizedBox(height: 36),
+                const StudyEmptyState(
+                  title: 'Nenhum flashcard cadastrado ainda.',
+                  detail: 'Crie um cartão para começar a revisar.',
+                  icon: Icons.style_outlined,
+                ),
+              ],
             );
           }
 
@@ -151,33 +166,36 @@ class _FlashcardsPreviewPageState extends State<FlashcardsPreviewPage> {
               : studyCards;
           final tags = cards.expand((card) => card.tags).toSet().toList()
             ..sort();
+          final filtersActive = _filter != 'all' || _selectedTag.isNotEmpty;
           return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Align(
-                alignment: Alignment.centerRight,
-                child: Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    OutlinedButton.icon(
-                      onPressed: _openHistory,
-                      icon: const Icon(Icons.insights_outlined),
-                      label: const Text('Histórico'),
-                    ),
-                    OutlinedButton.icon(
-                      onPressed: _openProgress,
-                      icon: const Icon(Icons.trending_up_outlined),
-                      label: const Text('Progresso'),
-                    ),
-                    FilledButton.icon(
-                      onPressed: _createFlashcard,
-                      icon: const Icon(Icons.add),
-                      label: const Text('Novo flashcard'),
-                    ),
-                  ],
-                ),
+              _buildTopActions(),
+              const SizedBox(height: 16),
+              StudyFocusCard(
+                eyebrow: activeStudyCards.isEmpty
+                    ? 'Revisão concluída'
+                    : 'Sessão recomendada',
+                eyebrowIcon: activeStudyCards.isEmpty
+                    ? Icons.check_circle_outline
+                    : Icons.play_circle_outline,
+                title: activeStudyCards.isEmpty
+                    ? 'Nenhum card pendente agora'
+                    : '${activeStudyCards.length} cards para revisar',
+                detail: activeStudyCards.isEmpty
+                    ? '${newCards.length} novos disponíveis para quando quiser continuar.'
+                    : '${dueCards.length} pendentes hoje · ${newCards.length} novos · limite de $_dailyLimit por sessão.',
+                actionIcon: activeStudyCards.isEmpty
+                    ? Icons.style_outlined
+                    : Icons.play_arrow_rounded,
+                actionLabel: activeStudyCards.isEmpty
+                    ? 'Ver todos os cards'
+                    : 'Iniciar sessão',
+                onPressed: activeStudyCards.isEmpty
+                    ? () => setState(() => _filter = 'all')
+                    : () => _startStudy(activeStudyCards),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 14),
               FutureBuilder<List<FlashcardSessionSummary>>(
                 future: _todaySessionsFuture,
                 builder: (context, summarySnapshot) {
@@ -189,129 +207,57 @@ class _FlashcardsPreviewPageState extends State<FlashcardsPreviewPage> {
               ),
               const SizedBox(height: 12),
               _buildRecommendation(difficultCards, dueCards),
-              const SizedBox(height: 12),
-              TextField(
-                decoration: const InputDecoration(
-                  labelText: 'Buscar flashcards',
-                  hintText: 'Pergunta, resposta, código ou tag',
-                  prefixIcon: Icon(Icons.search),
-                ),
-                onChanged: (value) => setState(() => _search = value),
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                initialValue: _sort,
-                decoration: const InputDecoration(labelText: 'Ordenar por'),
-                items: const [
-                  DropdownMenuItem(
-                    value: 'due',
-                    child: Text('Próxima revisão'),
+              if (difficultCards.isNotEmpty) const SizedBox(height: 14),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: StudySearchField(
+                      hintText: 'Buscar cards',
+                      query: _search,
+                      onChanged: (value) => setState(() => _search = value),
+                      onClear: () => setState(() => _search = ''),
+                    ),
                   ),
-                  DropdownMenuItem(
-                    value: 'alphabetical',
-                    child: Text('Alfabética'),
-                  ),
-                  DropdownMenuItem(
-                    value: 'reviews',
-                    child: Text('Mais revisados'),
+                  const SizedBox(width: 8),
+                  StudyFilterButton(
+                    active: filtersActive,
+                    tooltip: 'Filtrar flashcards',
+                    onPressed: () => _showFlashcardFilters(
+                      tags: tags,
+                      allCards: cards,
+                      dueCards: dueCards,
+                      newCards: newCards,
+                      difficultCards: difficultCards,
+                      reviewedCards: reviewedCards,
+                    ),
                   ),
                 ],
-                onChanged: (value) {
-                  if (value != null) _changeSort(value);
-                },
               ),
               const SizedBox(height: 12),
-              DropdownButtonFormField<int>(
-                initialValue: _dailyLimit,
-                decoration: const InputDecoration(labelText: 'Limite diário'),
-                items: const [
-                  DropdownMenuItem(value: 10, child: Text('Até 10 cards')),
-                  DropdownMenuItem(value: 20, child: Text('Até 20 cards')),
-                  DropdownMenuItem(value: 50, child: Text('Até 50 cards')),
-                  DropdownMenuItem(value: 0, child: Text('Todos os cards')),
-                ],
-                onChanged: (value) {
-                  if (value != null) _changeDailyLimit(value);
-                },
-              ),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Priorizar cards difíceis'),
-                subtitle: const Text(
-                  'Inclui primeiro os cards difíceis na próxima sessão.',
-                ),
-                value: _preferRecommended,
-                onChanged: _changePreferRecommended,
-              ),
-              if (tags.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      _buildTagChip('', 'Todas'),
-                      ...tags.map((tag) => _buildTagChip(tag, tag)),
-                    ],
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Todos os cards',
+                      style: Theme.of(context).textTheme.titleMedium
+                          ?.copyWith(fontWeight: FontWeight.w800),
+                    ),
                   ),
-                ),
-              ],
-              const SizedBox(height: 12),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  '${dueCards.length} pendentes hoje · '
-                  '${reviewedCards.length} já revisados',
-                  style: const TextStyle(color: Color(0xFFB6B7AD)),
-                ),
+                  Text(
+                    '${visibleCards.length} de ${cards.length}',
+                    style: const TextStyle(
+                      color: DunotsColors.muted,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 10),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    _buildFilterChip('all', 'Todos', cards.length),
-                    _buildFilterChip('due', 'Vencidos', dueCards.length),
-                    _buildFilterChip('new', 'Novos', newCards.length),
-                    _buildFilterChip(
-                      'difficult',
-                      'Difíceis',
-                      difficultCards.length,
-                    ),
-                    _buildFilterChip(
-                      'reviewed',
-                      'Revisados',
-                      reviewedCards.length,
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  onPressed: activeStudyCards.isEmpty
-                      ? null
-                      : () => _startStudy(activeStudyCards),
-                  icon: const Icon(Icons.play_arrow_rounded),
-                  label: Text(
-                    activeStudyCards.isEmpty
-                        ? 'Nenhuma revisão pendente'
-                        : _preferRecommended
-                        ? 'Iniciar recomendada · '
-                              '${activeStudyCards.length} cards'
-                        : 'Iniciar revisão · ${activeStudyCards.length} pendentes',
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
               if (visibleCards.isEmpty)
                 const StudyEmptyState(
                   title: 'Nenhum flashcard neste filtro.',
-                  detail: 'Escolha outro filtro para ver seus cartões.',
+                  detail: 'Abra os filtros para escolher outra situação.',
                   icon: Icons.filter_alt_off_outlined,
                 )
               else
@@ -335,8 +281,199 @@ class _FlashcardsPreviewPageState extends State<FlashcardsPreviewPage> {
     );
   }
 
+  Widget _buildTopActions() {
+    final actions = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        FilledButton.icon(
+          onPressed: _createFlashcard,
+          icon: const Icon(Icons.add),
+          label: const Text('Novo'),
+        ),
+        const SizedBox(width: 4),
+        _buildActionsMenu(),
+      ],
+    );
+    if (!widget.showHeader) {
+      return Align(alignment: Alignment.centerRight, child: actions);
+    }
+    return StudyScreenHeader(
+      icon: Icons.style_outlined,
+      title: 'Flashcards',
+      subtitle: 'Revise no seu ritmo.',
+      action: actions,
+    );
+  }
+
+  Widget _buildActionsMenu() {
+    return StudyContextMenu<String>(
+      tooltip: 'Mais ações dos flashcards',
+      onSelected: (value) {
+        switch (value) {
+          case 'history':
+            _openHistory();
+          case 'progress':
+            _openProgress();
+          case 'settings':
+            _showReviewSettings();
+        }
+      },
+      itemBuilder: (context) => const [
+        PopupMenuItem(
+          value: 'history',
+          child: ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(Icons.insights_outlined),
+            title: Text('Histórico'),
+          ),
+        ),
+        PopupMenuItem(
+          value: 'progress',
+          child: ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(Icons.trending_up_outlined),
+            title: Text('Progresso'),
+          ),
+        ),
+        PopupMenuItem(
+          value: 'settings',
+          child: ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(Icons.tune_outlined),
+            title: Text('Configurar revisão'),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _showFlashcardFilters({
+    required List<String> tags,
+    required List<Flashcard> allCards,
+    required List<Flashcard> dueCards,
+    required List<Flashcard> newCards,
+    required List<Flashcard> difficultCards,
+    required List<Flashcard> reviewedCards,
+  }) async {
+    var selectedFilter = _filter;
+    var selectedTag = _selectedTag;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          Widget situationChip(String value, String label, int count) {
+            return FilterChip(
+              selected: selectedFilter == value,
+              label: Text('$label ($count)'),
+              onSelected: (_) {
+                setState(() => _filter = value);
+                setSheetState(() => selectedFilter = value);
+              },
+            );
+          }
+
+          Widget tagChip(String value, String label) {
+            return FilterChip(
+              selected: selectedTag == value,
+              label: Text(label),
+              onSelected: (_) {
+                setState(() => _selectedTag = value);
+                setSheetState(() => selectedTag = value);
+              },
+            );
+          }
+
+          return SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 36,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Theme.of(sheetContext).colorScheme.outline,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Filtrar flashcards',
+                    style: Theme.of(sheetContext).textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Situação',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      situationChip('all', 'Todos', allCards.length),
+                      situationChip('due', 'Vencidos', dueCards.length),
+                      situationChip('new', 'Novos', newCards.length),
+                      situationChip(
+                        'difficult',
+                        'Difíceis',
+                        difficultCards.length,
+                      ),
+                      situationChip(
+                        'reviewed',
+                        'Revisados',
+                        reviewedCards.length,
+                      ),
+                    ],
+                  ),
+                  if (tags.isNotEmpty) ...[
+                    const SizedBox(height: 20),
+                    const Text(
+                      'Tag',
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        tagChip('', 'Todas'),
+                        ...tags.map((tag) => tagChip(tag, tag)),
+                      ],
+                    ),
+                  ],
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      onPressed: () => Navigator.of(sheetContext).pop(),
+                      child: const Text('Concluir'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   void _reload() {
-    _cardsFuture = _repository.getAll();
+    final future = _repository.getAll();
+    _cardsFuture = future;
+    unawaited(
+      future
+          .then((cards) {
+            if (!mounted || !identical(_cardsFuture, future)) return;
+            setState(() => _cardsCache = List.unmodifiable(cards));
+          })
+          .catchError((_) {}),
+    );
     _todaySessionsFuture = _sessionRepository.getForDay(DateTime.now());
   }
 
@@ -368,6 +505,87 @@ class _FlashcardsPreviewPageState extends State<FlashcardsPreviewPage> {
   void _changePreferRecommended(bool value) {
     setState(() => _preferRecommended = value);
     unawaited(_savePreferences());
+  }
+
+  Future<void> _showReviewSettings() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) => SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Theme.of(sheetContext).colorScheme.outline,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Configurar revisão',
+                style: Theme.of(sheetContext).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                initialValue: _sort,
+                decoration: const InputDecoration(labelText: 'Ordenar'),
+                items: const [
+                  DropdownMenuItem(
+                    value: 'due',
+                    child: Text('Próxima revisão'),
+                  ),
+                  DropdownMenuItem(value: 'alphabetical', child: Text('A–Z')),
+                  DropdownMenuItem(
+                    value: 'reviews',
+                    child: Text('Mais revisados'),
+                  ),
+                ],
+                onChanged: (value) {
+                  if (value != null) _changeSort(value);
+                },
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<int>(
+                initialValue: _dailyLimit,
+                decoration: const InputDecoration(
+                  labelText: 'Limite por sessão',
+                ),
+                items: const [
+                  DropdownMenuItem(value: 10, child: Text('10 cards')),
+                  DropdownMenuItem(value: 20, child: Text('20 cards')),
+                  DropdownMenuItem(value: 50, child: Text('50 cards')),
+                  DropdownMenuItem(value: 0, child: Text('Todos')),
+                ],
+                onChanged: (value) {
+                  if (value != null) _changeDailyLimit(value);
+                },
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Priorizar difíceis'),
+                subtitle: const Text('Cards difíceis entram primeiro.'),
+                value: _preferRecommended,
+                onChanged: _changePreferRecommended,
+              ),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: () => Navigator.of(sheetContext).pop(),
+                  child: const Text('Concluir'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _savePreferences() {
@@ -419,22 +637,6 @@ class _FlashcardsPreviewPageState extends State<FlashcardsPreviewPage> {
     );
   }
 
-  Widget _buildFilterChip(String value, String label, int count) {
-    return FilterChip(
-      selected: _filter == value,
-      label: Text('$label ($count)'),
-      onSelected: (_) => setState(() => _filter = value),
-    );
-  }
-
-  Widget _buildTagChip(String value, String label) {
-    return FilterChip(
-      selected: _selectedTag == value,
-      label: Text(label),
-      onSelected: (_) => setState(() => _selectedTag = value),
-    );
-  }
-
   Widget _buildTodaySummary(List<FlashcardSessionSummary> sessions) {
     if (sessions.isEmpty) return const SizedBox.shrink();
     final answered = sessions.fold<int>(
@@ -449,37 +651,24 @@ class _FlashcardsPreviewPageState extends State<FlashcardsPreviewPage> {
       0,
       (total, session) => total + session.goodCount,
     );
-    final easy = sessions.fold<int>(
-      0,
-      (total, session) => total + session.easyCount,
-    );
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Resumo de hoje',
-              style: TextStyle(fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              '$answered cards respondidos em ${sessions.length} sessão(ões).',
-            ),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                Chip(label: Text('Difíceis: $difficult')),
-                Chip(label: Text('Bons: $good')),
-                Chip(label: Text('Fáceis: $easy')),
-              ],
-            ),
-          ],
+    return StudyMetricStrip(
+      metrics: [
+        StudyMetric(
+          value: '$answered',
+          label: 'respondidos hoje',
+          color: DunotsColors.mint,
         ),
-      ),
+        StudyMetric(
+          value: '$good',
+          label: 'boa resposta',
+          color: DunotsColors.emerald,
+        ),
+        StudyMetric(
+          value: '$difficult',
+          label: 'para revisar',
+          color: DunotsColors.amber,
+        ),
+      ],
     );
   }
 
@@ -497,68 +686,40 @@ class _FlashcardsPreviewPageState extends State<FlashcardsPreviewPage> {
     final orderedTags = tagCounts.entries.toList()
       ..sort((first, second) => second.value.compareTo(first.value));
     final leadingTag = orderedTags.isEmpty ? null : orderedTags.first.key;
-    return Card(
-      color: Theme.of(context).colorScheme.error.withValues(alpha: 0.12),
+    final difficultLabel = difficultCards.length == 1
+        ? '1 card difícil'
+        : '${difficultCards.length} cards difíceis';
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: DunotsColors.amber.withValues(alpha: 0.10),
+        border: Border.all(color: DunotsColors.amber.withValues(alpha: 0.30)),
+        borderRadius: BorderRadius.circular(16),
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
+        child: Row(
           children: [
-            Row(
-              children: [
-                Icon(
-                  Icons.flag_outlined,
-                  color: Theme.of(context).colorScheme.error,
-                ),
-                const SizedBox(width: 8),
-                const Text(
-                  'Recomendação de revisão',
-                  style: TextStyle(fontWeight: FontWeight.w700),
-                ),
-              ],
+            const Icon(
+              Icons.tips_and_updates_outlined,
+              color: DunotsColors.amber,
             ),
-            const SizedBox(height: 8),
-            Text(
-              '${difficultCards.length} card(s) foram classificados como difíceis.',
-            ),
-            if (leadingTag != null) ...[
-              const SizedBox(height: 4),
-              Text('Tema para priorizar: $leadingTag.'),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: orderedTags
-                    .map(
-                      (entry) =>
-                          Chip(label: Text('${entry.key}: ${entry.value}')),
-                    )
-                    .toList(growable: false),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                leadingTag == null
+                    ? '$difficultLabel merece uma nova revisão.'
+                    : '$difficultLabel · priorize $leadingTag.',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 13, height: 1.25),
               ),
-            ],
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                FilledButton.icon(
-                  onPressed: () => _openRecommendedSession(
-                    difficultCards: difficultCards,
-                    dueCards: dueCards,
-                  ),
-                  icon: const Icon(Icons.play_arrow_rounded),
-                  label: const Text('Iniciar recomendada'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: () => setState(() {
-                    _filter = 'difficult';
-                    _search = '';
-                    _selectedTag = '';
-                  }),
-                  icon: const Icon(Icons.filter_alt_outlined),
-                  label: const Text('Ver cards difíceis'),
-                ),
-              ],
+            ),
+            TextButton(
+              onPressed: () => _openRecommendedSession(
+                difficultCards: difficultCards,
+                dueCards: dueCards,
+              ),
+              child: const Text('Revisar'),
             ),
           ],
         ),
@@ -576,7 +737,7 @@ class _FlashcardsPreviewPageState extends State<FlashcardsPreviewPage> {
     );
     if (orderedCards.isEmpty || !mounted) return;
 
-    final limit = await showDialog<int>(
+    final limit = await showDunotsDrawer<int>(
       context: context,
       builder: (_) => _RecommendedSessionDialog(
         availableCount: orderedCards.length,
@@ -639,67 +800,70 @@ class _FlashcardsPreviewPageState extends State<FlashcardsPreviewPage> {
 
   Future<void> _createFlashcard() async {
     final materials = await _loadAvailableMaterials();
-    final diagrams =
-        await widget.diagramRepository?.getAll() ?? const <StudyDiagram>[];
     if (!mounted) return;
-    final card = await showDialog<Flashcard>(
+    final card = await showDunotsDrawer<Flashcard>(
       context: context,
-      builder: (_) => FlashcardFormDialog(
-        availableMaterials: materials,
-        availableDiagrams: diagrams,
-      ),
+      builder: (_) => FlashcardFormDialog(availableMaterials: materials),
     );
     if (card == null || !mounted) return;
-    await _save(() => _repository.create(card));
+    await _save(() => _repository.create(card), addedCard: card);
   }
 
   Future<void> _editFlashcard(Flashcard card) async {
     final materials = await _loadAvailableMaterials(
       excludedMaterialId: card.id,
     );
-    final diagrams =
-        await widget.diagramRepository?.getAll() ?? const <StudyDiagram>[];
     if (!mounted) return;
-    final updated = await showDialog<Flashcard>(
+    final updated = await showDunotsDrawer<Flashcard>(
       context: context,
-      builder: (_) => FlashcardFormDialog(
-        initialCard: card,
-        availableMaterials: materials,
-        availableDiagrams: diagrams,
-      ),
+      builder: (_) =>
+          FlashcardFormDialog(initialCard: card, availableMaterials: materials),
     );
     if (updated == null || !mounted) return;
-    await _save(() => _repository.update(updated));
+    await _save(() => _repository.update(updated), updatedCard: updated);
   }
 
   Future<void> _confirmDelete(Flashcard card) async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showDunotsDrawer<bool>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Excluir flashcard?'),
-        content: Text('O flashcard "${card.front}" será removido.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Excluir'),
-          ),
-        ],
+      builder: (_) => DunotsConfirmDialog(
+        title: 'Excluir flashcard?',
+        message: 'O flashcard "${card.front}" será removido.',
+        confirmLabel: 'Excluir',
       ),
     );
     if (confirmed == true && mounted) {
-      await _save(() => _repository.delete(card.id));
+      await _save(() => _repository.delete(card.id), deletedCardId: card.id);
     }
   }
 
-  Future<void> _save(Future<void> Function() action) async {
+  Future<void> _save(
+    Future<void> Function() action, {
+    Flashcard? addedCard,
+    Flashcard? updatedCard,
+    String? deletedCardId,
+  }) async {
     try {
       await action();
       _materialRepository.invalidate();
-      if (mounted) setState(_reload);
+      if (!mounted) return;
+
+      final current = _cardsCache;
+      if (current == null) {
+        setState(_reload);
+        return;
+      }
+
+      final next = current
+          .where((card) => card.id != deletedCardId)
+          .map((card) => card.id == updatedCard?.id ? updatedCard! : card)
+          .toList(growable: true);
+      if (addedCard != null) next.add(addedCard);
+
+      setState(() {
+        _cardsCache = List.unmodifiable(next);
+        _cardsFuture = Future.value(_cardsCache);
+      });
     } on StateError catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
@@ -748,46 +912,39 @@ class _RecommendedSessionDialogState extends State<_RecommendedSessionDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Montar revisão recomendada'),
-      content: SizedBox(
-        width: 420,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '${widget.availableCount} cards disponíveis · '
-              '${widget.difficultCount} classificados como difíceis.',
-            ),
-            const SizedBox(height: 14),
-            const Text(
-              'Os cards difíceis aparecem primeiro. Quantos você quer revisar?',
-            ),
-            const SizedBox(height: 8),
-            RadioGroup<int>(
-              groupValue: _selectedCount,
-              onChanged: (value) {
-                if (value != null) setState(() => _selectedCount = value);
-              },
-              child: Column(
-                children: _options
-                    .map(
-                      (option) => RadioListTile<int>(
-                        value: option,
-                        contentPadding: EdgeInsets.zero,
-                        title: Text(
-                          option == widget.availableCount
-                              ? 'Todos os cards ($option)'
-                              : '$option cards',
-                        ),
+    return DunotsModal(
+      title: 'Montar revisão recomendada',
+      subtitle: 'Os cards difíceis aparecem primeiro.',
+      icon: Icons.auto_awesome_outlined,
+      // ignore: sort_child_properties_last
+      child: DunotsFormColumn(
+        children: [
+          Text(
+            '${widget.availableCount} cards disponíveis · '
+            '${widget.difficultCount} classificados como difíceis.',
+          ),
+          RadioGroup<int>(
+            groupValue: _selectedCount,
+            onChanged: (value) {
+              if (value != null) setState(() => _selectedCount = value);
+            },
+            child: Column(
+              children: _options
+                  .map(
+                    (option) => RadioListTile<int>(
+                      value: option,
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(
+                        option == widget.availableCount
+                            ? 'Todos os cards ($option)'
+                            : '$option cards',
                       ),
-                    )
-                    .toList(growable: false),
-              ),
+                    ),
+                  )
+                  .toList(growable: false),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
       actions: [
         TextButton(
