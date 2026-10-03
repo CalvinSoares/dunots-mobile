@@ -7,8 +7,6 @@ import '../features/questions/data/question_repository.dart';
 import '../features/questions/data/quiz_exam_repository.dart';
 import '../features/questions/questions_preview_page.dart';
 import '../features/quizzes/data/quiz_attempt_repository.dart';
-import '../features/flashcards/flashcards_preview_page.dart';
-import '../features/more/more_page.dart';
 import '../features/roadmaps/data/study_node_repository.dart';
 import '../features/roadmaps/data/study_material_repository.dart';
 import '../features/roadmaps/data/study_document_repository.dart';
@@ -19,11 +17,11 @@ import '../features/today/today_page.dart';
 import '../core/notifications/local_notification_service.dart';
 import '../core/sync/sync_database_repository.dart';
 import '../core/sync/sync_dialog.dart';
-import '../features/challenges/data/challenge_repository.dart';
-import '../features/challenges/challenges_preview_page.dart';
-import '../features/diagrams/data/diagram_repository.dart';
 import '../features/study/data/study_phase_repository.dart';
-import '../features/diagrams/diagrams_preview_page.dart';
+import '../features/study/study_hub_page.dart';
+import '../shared/widgets/dunots_app_header.dart';
+import '../shared/widgets/dunots_bottom_navigation.dart';
+import '../shared/widgets/dunots_modal.dart';
 
 class DunotsHomeShell extends StatefulWidget {
   final StudyTrackRepository? trackRepository;
@@ -38,8 +36,6 @@ class DunotsHomeShell extends StatefulWidget {
   final QuizAttemptRepository? attemptRepository;
   final LocalNotificationService? localNotificationService;
   final SyncDatabaseRepository? syncRepository;
-  final ChallengeRepository? challengeRepository;
-  final DiagramRepository? diagramRepository;
   final StudyPhaseRepository? phaseRepository;
   final StudyDocumentRepository? documentRepository;
   final StudyMaterialProgressRepository? materialProgressRepository;
@@ -57,8 +53,6 @@ class DunotsHomeShell extends StatefulWidget {
     this.attemptRepository,
     this.localNotificationService,
     this.syncRepository,
-    this.challengeRepository,
-    this.diagramRepository,
     this.phaseRepository,
     this.documentRepository,
     this.materialProgressRepository,
@@ -72,62 +66,63 @@ class _DunotsHomeShellState extends State<DunotsHomeShell> {
   static const wideLayoutBreakpoint = 840.0;
   int selectedIndex = 0;
   late final List<Widget> pages;
+  final _appHeaderKey = GlobalKey<DunotsAppHeaderState>();
 
   @override
   void initState() {
     super.initState();
     pages = [
       TodayPage(
+        showHeader: false,
         flashcardRepository: widget.flashcardRepository,
         flashcardSessionRepository: widget.flashcardSessionRepository,
         flashcardReviewPreferencesRepository:
             widget.flashcardReviewPreferencesRepository,
         trackRepository: widget.trackRepository,
-        questionRepository: widget.questionRepository,
         attemptRepository: widget.attemptRepository,
-        challengeRepository: widget.challengeRepository,
         phaseRepository: widget.phaseRepository,
         localNotificationService: widget.localNotificationService,
-        onOpenFlashcards: () => _selectTab(1),
-        onOpenChallenges: () => _selectTab(2),
-        onOpenQuestions: () => _selectTab(3),
+        onOpenFlashcards: () => _openStudyTab(0),
+        onOpenTracks: () => _selectTab(3),
       ),
-      FlashcardsPreviewPage(
-        repository: widget.flashcardRepository,
+      StudyHubPage(
+        showHeader: false,
+        flashcardRepository: widget.flashcardRepository,
+        flashcardSessionRepository: widget.flashcardSessionRepository,
+        flashcardReviewPreferencesRepository:
+            widget.flashcardReviewPreferencesRepository,
         questionRepository: widget.questionRepository,
-        sessionRepository: widget.flashcardSessionRepository,
-        preferencesRepository: widget.flashcardReviewPreferencesRepository,
-        diagramRepository: widget.diagramRepository,
-      ),
-      ChallengesPreviewPage(
-        repository: widget.challengeRepository,
-        diagramRepository: widget.diagramRepository,
       ),
       QuestionsPreviewPage(
+        showHeader: false,
         repository: widget.questionRepository,
         examRepository: widget.examRepository,
         attemptRepository: widget.attemptRepository,
       ),
-      DiagramsPreviewPage(repository: widget.diagramRepository),
       RoadmapsPreviewPage(
+        showHeader: false,
         repository: widget.trackRepository,
         nodeRepository: widget.nodeRepository,
         materialLinkRepository: widget.materialLinkRepository,
         flashcardRepository: widget.flashcardRepository,
         questionRepository: widget.questionRepository,
         attemptRepository: widget.attemptRepository,
-        diagramRepository: widget.diagramRepository,
-        challengeRepository: widget.challengeRepository,
         documentRepository: widget.documentRepository,
         materialProgressRepository: widget.materialProgressRepository,
       ),
-      const MorePage(),
     ];
   }
 
   void _selectTab(int index) {
     if (!mounted) return;
     setState(() => selectedIndex = index);
+  }
+
+  void _openStudyTab(int tabIndex) {
+    if (tabIndex == 0) {
+      _selectTab(1);
+      _appHeaderKey.currentState?.refresh();
+    }
   }
 
   @override
@@ -141,36 +136,66 @@ class _DunotsHomeShellState extends State<DunotsHomeShell> {
           children: [
             if (isWideLayout) _buildNavigationRail(),
             Expanded(
-              child: IndexedStack(index: selectedIndex, children: pages),
+              child: Column(
+                children: [
+                  DunotsAppHeader(
+                    key: _appHeaderKey,
+                    icon: _pageHeaders[selectedIndex].$1,
+                    title: _pageHeaders[selectedIndex].$2,
+                    flashcardRepository: widget.flashcardRepository,
+                    flashcardSessionRepository:
+                        widget.flashcardSessionRepository,
+                    flashcardReviewPreferencesRepository:
+                        widget.flashcardReviewPreferencesRepository,
+                    localNotificationService: widget.localNotificationService,
+                    onOpenFlashcards: () => _openStudyTab(0),
+                    onOpenSync: widget.syncRepository == null
+                        ? null
+                        : _openSync,
+                  ),
+                  Expanded(
+                    child: IndexedStack(index: selectedIndex, children: pages),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
       ),
-      bottomNavigationBar: isWideLayout ? null : _buildNavigationBar(),
-      floatingActionButton: widget.syncRepository == null
+      bottomNavigationBar: isWideLayout
           ? null
-          : FloatingActionButton.small(
-              tooltip: 'Sincronizar dados',
-              onPressed: _openSync,
-              child: const Icon(Icons.sync),
+          : DunotsBottomNavigation(
+              selectedIndex: selectedIndex,
+              onSelected: _selectTab,
             ),
     );
   }
 
   Future<void> _openSync() async {
     final repository = widget.syncRepository;
-    if (repository == null || !mounted) return;
-    await showDialog<void>(
+    if (!mounted) return;
+    if (repository == null) {
+      await showDunotsDrawer<void>(
+        context: context,
+        builder: (dialogContext) => DunotsModal(
+          title: 'Sincronização indisponível',
+          icon: Icons.sync_problem_outlined,
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Entendi'),
+            ),
+          ],
+          child: const Text(
+            'A sincronização ainda não foi configurada neste ambiente.',
+          ),
+        ),
+      );
+      return;
+    }
+    await showDunotsDrawer<void>(
       context: context,
       builder: (_) => SyncDialog(repository: repository),
-    );
-  }
-
-  NavigationBar _buildNavigationBar() {
-    return NavigationBar(
-      selectedIndex: selectedIndex,
-      onDestinationSelected: _selectTab,
-      destinations: _navigationDestinations,
     );
   }
 
@@ -193,38 +218,11 @@ class _DunotsHomeShellState extends State<DunotsHomeShell> {
     );
   }
 
-  static const _navigationDestinations = [
-    NavigationDestination(
-      icon: Icon(Icons.today_outlined),
-      selectedIcon: Icon(Icons.today),
-      label: 'Hoje',
-    ),
-    NavigationDestination(
-      icon: Icon(Icons.style_outlined),
-      selectedIcon: Icon(Icons.style),
-      label: 'Cards',
-    ),
-    NavigationDestination(
-      icon: Icon(Icons.quiz_outlined),
-      selectedIcon: Icon(Icons.quiz),
-      label: 'Questões',
-    ),
-    NavigationDestination(
-      icon: Icon(Icons.code_outlined),
-      selectedIcon: Icon(Icons.code),
-      label: 'Desafios',
-    ),
-    NavigationDestination(
-      icon: Icon(Icons.account_tree_outlined),
-      selectedIcon: Icon(Icons.account_tree),
-      label: 'Fluxos',
-    ),
-    NavigationDestination(
-      icon: Icon(Icons.route_outlined),
-      selectedIcon: Icon(Icons.route),
-      label: 'Trilhas',
-    ),
-    NavigationDestination(icon: Icon(Icons.more_horiz), label: 'Mais'),
+  static const _pageHeaders = [
+    (Icons.today_outlined, 'Hoje'),
+    (Icons.style_outlined, 'Flashcards'),
+    (Icons.quiz_outlined, 'Questões'),
+    (Icons.route_outlined, 'Minhas trilhas'),
   ];
 
   static const _railDestinations = [
@@ -236,7 +234,7 @@ class _DunotsHomeShellState extends State<DunotsHomeShell> {
     NavigationRailDestination(
       icon: Icon(Icons.style_outlined),
       selectedIcon: Icon(Icons.style),
-      label: Text('Cards'),
+      label: Text('Estudar'),
     ),
     NavigationRailDestination(
       icon: Icon(Icons.quiz_outlined),
@@ -244,23 +242,9 @@ class _DunotsHomeShellState extends State<DunotsHomeShell> {
       label: Text('Questões'),
     ),
     NavigationRailDestination(
-      icon: Icon(Icons.code_outlined),
-      selectedIcon: Icon(Icons.code),
-      label: Text('Desafios'),
-    ),
-    NavigationRailDestination(
-      icon: Icon(Icons.account_tree_outlined),
-      selectedIcon: Icon(Icons.account_tree),
-      label: Text('Fluxos'),
-    ),
-    NavigationRailDestination(
       icon: Icon(Icons.route_outlined),
       selectedIcon: Icon(Icons.route),
       label: Text('Trilhas'),
-    ),
-    NavigationRailDestination(
-      icon: Icon(Icons.more_horiz),
-      label: Text('Mais'),
     ),
   ];
 }

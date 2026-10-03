@@ -11,8 +11,6 @@ import '../features/roadmaps/data/study_material_repository.dart';
 import '../features/roadmaps/data/study_document_repository.dart';
 import '../features/roadmaps/data/study_material_progress_repository.dart';
 import '../features/roadmaps/data/study_track_repository.dart';
-import '../features/challenges/data/challenge_repository.dart';
-import '../features/diagrams/data/diagram_repository.dart';
 import '../features/study/data/study_phase_repository.dart';
 import '../core/notifications/local_notification_service.dart';
 import '../core/sync/sync_database_repository.dart';
@@ -32,8 +30,6 @@ class DunotsMobileApp extends StatelessWidget {
   final QuizAttemptRepository? attemptRepository;
   final LocalNotificationService? localNotificationService;
   final SyncDatabaseRepository? syncRepository;
-  final ChallengeRepository? challengeRepository;
-  final DiagramRepository? diagramRepository;
   final StudyPhaseRepository? phaseRepository;
   final StudyDocumentRepository? documentRepository;
   final StudyMaterialProgressRepository? materialProgressRepository;
@@ -51,8 +47,6 @@ class DunotsMobileApp extends StatelessWidget {
     this.attemptRepository,
     this.localNotificationService,
     this.syncRepository,
-    this.challengeRepository,
-    this.diagramRepository,
     this.phaseRepository,
     this.documentRepository,
     this.materialProgressRepository,
@@ -77,8 +71,6 @@ class DunotsMobileApp extends StatelessWidget {
         attemptRepository: attemptRepository,
         localNotificationService: localNotificationService,
         syncRepository: syncRepository,
-        challengeRepository: challengeRepository,
-        diagramRepository: diagramRepository,
         phaseRepository: phaseRepository,
         documentRepository: documentRepository,
         materialProgressRepository: materialProgressRepository,

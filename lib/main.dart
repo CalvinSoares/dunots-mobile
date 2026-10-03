@@ -19,8 +19,6 @@ import 'package:dunots_mobile/features/quizzes/data/sqlite_quiz_attempt_reposito
 import 'package:flutter/material.dart';
 
 import 'core/sync/sync_database_repository.dart';
-import 'features/challenges/data/sqlite_challenge_repository.dart';
-import 'features/diagrams/data/sqlite_diagram_repository.dart';
 import 'features/study/data/sqlite_study_phase_repository.dart';
 
 export 'app/dunots_app.dart';
@@ -65,8 +63,6 @@ Future<void> main() async {
       examRepository: examRepository,
       attemptRepository: attemptRepository,
       syncRepository: SyncDatabaseRepository(database.database),
-      challengeRepository: SqliteChallengeRepository(database),
-      diagramRepository: SqliteDiagramRepository(database),
       phaseRepository: SqliteStudyPhaseRepository(database),
       documentRepository: SqliteStudyDocumentRepository(database),
       materialProgressRepository: SqliteStudyMaterialProgressRepository(
