@@ -1,9 +1,12 @@
+import 'dart:ui';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'package:dunots_mobile/core/database/app_database.dart';
 import 'package:dunots_mobile/core/sync/sync_contract.dart';
 import 'package:dunots_mobile/core/sync/sync_database_repository.dart';
+import 'package:dunots_mobile/core/sync/sync_dialog.dart';
 
 void main() {
   setUpAll(() {
@@ -71,5 +74,12 @@ void main() {
     expect(rows[1]['front'], 'Recebido use-received');
 
     await database.close();
+  });
+
+  test('calcula dimensões responsivas para o modal de sincronização', () {
+    expect(SyncDialogLayout.contentWidth(const Size(360, 800)), 304);
+    expect(SyncDialogLayout.contentWidth(const Size(1200, 800)), 720);
+    expect(SyncDialogLayout.contentHeight(const Size(360, 400)), 300);
+    expect(SyncDialogLayout.contentHeight(const Size(360, 1000)), 500);
   });
 }

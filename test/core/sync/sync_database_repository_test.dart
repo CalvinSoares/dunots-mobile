@@ -9,6 +9,8 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:dunots_mobile/core/database/app_database.dart';
 import 'package:dunots_mobile/core/sync/sync_contract.dart';
 import 'package:dunots_mobile/core/sync/sync_database_repository.dart';
+import 'package:dunots_mobile/features/quizzes/data/sqlite_quiz_attempt_repository.dart';
+import 'package:dunots_mobile/features/quizzes/domain/quiz_attempt.dart';
 
 void main() {
   setUpAll(() {
@@ -122,6 +124,93 @@ void main() {
 
     await database.close();
   });
+
+  test(
+    'normaliza tentativa exportada pelo desktop para o mural mobile',
+    () async {
+      final database = await AppDatabase.open(
+        databasePathOverride: inMemoryDatabasePath,
+      );
+      final syncRepository = SyncDatabaseRepository(database.database);
+      final package = SyncPackage(
+        exportedAt: DateTime.utc(2026, 10, 3),
+        source: const SyncIdentity(deviceId: 'desktop', deviceName: 'Desktop'),
+        collections: {
+          SyncCollections.quizAttempts: [
+            SyncRecord({
+              'id': 'desktop-attempt-1',
+              'title': 'Simulado de redes',
+              'questionIds': ['question-1'],
+              'currentQuestionIndex': 2,
+              'status': 'in-progress',
+              'answers': {'question-1': 'B'},
+              'startedAt': '2026-10-03T10:00:00.000Z',
+              'updatedAt': '2026-10-03T10:05:00.000Z',
+            }),
+          ],
+        },
+      );
+
+      final preview = await syncRepository.preview(package);
+      await syncRepository.apply(
+        preview,
+        defaultResolution: SyncConflictResolution.useReceived,
+      );
+
+      final attempts = await SqliteQuizAttemptRepository(database).getAll();
+      expect(attempts, hasLength(1));
+      expect(attempts.single.status, QuizAttemptStatus.inProgress);
+      expect(attempts.single.currentIndex, 2);
+      expect(attempts.single.answers['question-1'], 1);
+      expect(attempts.single.createdAt, DateTime.utc(2026, 10, 3, 10));
+
+      await database.close();
+    },
+  );
+
+  test(
+    'repara tentativas desktop existentes ao migrar para a versão atual',
+    () async {
+      final databasePath = path.join(
+        Directory.systemTemp.path,
+        'dunots-attempt-migration-${DateTime.now().microsecondsSinceEpoch}.db',
+      );
+      addTearDown(() => deleteDatabase(databasePath));
+
+      final current = await AppDatabase.open(
+        databasePathOverride: databasePath,
+      );
+      await current.database.insert('quiz_attempts', {
+        'id': 'legacy-desktop-attempt',
+        'title': 'Tentativa desktop',
+        'question_ids': '["question-1"]',
+        'current_index': 0,
+        'status': 'in-progress',
+        'answers': '{"question-1":"A"}',
+        'review_question_ids': '[]',
+        'review_notes': '{}',
+        'created_at': '',
+        'updated_at': '2026-10-03T10:00:00.000Z',
+      });
+      await current.close();
+
+      final raw = await databaseFactory.openDatabase(databasePath);
+      await raw.execute('PRAGMA user_version = 29');
+      await raw.close();
+
+      final migrated = await AppDatabase.open(
+        databasePathOverride: databasePath,
+      );
+      final attempt = (await SqliteQuizAttemptRepository(
+        migrated,
+      ).getAll()).single;
+      expect(attempt.status, QuizAttemptStatus.inProgress);
+      expect(attempt.createdAt, DateTime.utc(2026, 10, 3, 10));
+      expect(attempt.answers['question-1'], 0);
+
+      await migrated.close();
+    },
+  );
 
   test(
     'exporta pacote mobile com nomes e campos aceitos pelo desktop',
@@ -299,6 +388,89 @@ void main() {
 
     await database.close();
   });
+
+  test(
+    'importa roadmap exportado pelo desktop com aliases e pais fora da ordem',
+    () async {
+      final database = await AppDatabase.open(
+        databasePathOverride: inMemoryDatabasePath,
+      );
+      final repository = SyncDatabaseRepository(database.database);
+      final package = SyncPackage(
+        exportedAt: DateTime.utc(2026, 10, 2),
+        source: const SyncIdentity(deviceId: 'desktop', deviceName: 'Desktop'),
+        collections: {
+          SyncCollections.studyRoadmaps: [
+            SyncRecord({
+              'id': 'desktop-roadmap',
+              'title': 'Infraestrutura',
+              'description': 'Trilha exportada',
+              'createdAt': '2026-10-01T00:00:00.000Z',
+              'updatedAt': '2026-10-02T00:00:00.000Z',
+            }),
+          ],
+          SyncCollections.roadmapNodes: [
+            SyncRecord({
+              'id': 'desktop-child',
+              'roadmapId': 'desktop-roadmap',
+              'parentId': 'desktop-parent',
+              'title': 'Subtópico',
+              'description': '',
+              'order': 1,
+              'completed': true,
+              'notes': 'Nota',
+              'priority': 'high',
+              'createdAt': '2026-10-01T00:00:00.000Z',
+              'updatedAt': '2026-10-02T00:00:00.000Z',
+            }),
+            SyncRecord({
+              'id': 'desktop-parent',
+              'roadmapId': 'desktop-roadmap',
+              'parentId': null,
+              'title': 'Tópico',
+              'description': '',
+              'order': 0,
+              'completed': false,
+              'notes': '',
+              'priority': 'none',
+              'createdAt': '2026-10-01T00:00:00.000Z',
+              'updatedAt': '2026-10-02T00:00:00.000Z',
+            }),
+          ],
+          SyncCollections.roadmapLinks: [
+            SyncRecord({
+              'id': 'desktop-parent:card-1:flashcard',
+              'nodeId': 'desktop-parent',
+              'resourceId': 'card-1',
+              'resourceType': 'flashcard',
+              'updatedAt': '2026-10-02T00:00:00.000Z',
+            }),
+          ],
+        },
+      );
+
+      await repository.apply(
+        await repository.preview(package),
+        defaultResolution: SyncConflictResolution.useReceived,
+      );
+
+      final child = (await database.database.query(
+        'study_nodes',
+        where: 'id = ?',
+        whereArgs: ['desktop-child'],
+      )).single;
+      final link = (await database.database.query('study_node_materials'))
+          .single;
+      expect(child['track_id'], 'desktop-roadmap');
+      expect(child['parent_id'], 'desktop-parent');
+      expect(child['priority'], 3);
+      expect(child['is_completed'], 1);
+      expect(link['material_id'], 'card-1');
+      expect(link['material_type'], 'flashcard');
+
+      await database.close();
+    },
+  );
 
   test('cria e recupera backup antes de aplicar uma mesclagem', () async {
     final database = await AppDatabase.open(
