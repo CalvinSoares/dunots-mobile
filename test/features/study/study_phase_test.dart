@@ -3,7 +3,6 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'package:dunots_mobile/core/database/app_database.dart';
 import 'package:dunots_mobile/core/models/flashcard.dart';
-import 'package:dunots_mobile/features/challenges/domain/challenge.dart';
 import 'package:dunots_mobile/features/study/data/study_phase_repository.dart';
 import 'package:dunots_mobile/features/study/data/sqlite_study_phase_repository.dart';
 import 'package:dunots_mobile/features/study/domain/study_phase.dart';
@@ -21,7 +20,6 @@ void main() {
       id: 'phase-1',
       title: 'Redes',
       flashcardIds: const ['card-done', 'card-pending'],
-      challengeIds: const ['challenge-done'],
       createdAt: now,
       updatedAt: now,
     );
@@ -40,20 +38,11 @@ void main() {
         createdAt: now,
       ),
     ];
-    final challenges = [
-      Challenge(
-        id: 'challenge-done',
-        title: 'Two Sum',
-        solvedAt: now,
-        createdAt: now,
-      ),
-    ];
-
-    expect(phase.totalItems, 3);
-    expect(phase.completedItems(flashcards: cards, challenges: challenges), 2);
+    expect(phase.totalItems, 2);
+    expect(phase.completedItems(flashcards: cards), 1);
     expect(
-      phase.progress(flashcards: cards, challenges: challenges),
-      closeTo(2 / 3, 0.001),
+      phase.progress(flashcards: cards),
+      closeTo(1 / 2, 0.001),
     );
   });
 
@@ -94,7 +83,6 @@ void main() {
       title: 'Banco de dados',
       description: 'Revisão de SQL',
       flashcardIds: const ['card-1'],
-      challengeIds: const ['challenge-1'],
       sortOrder: 4,
       createdAt: now,
       updatedAt: now,
@@ -105,7 +93,6 @@ void main() {
 
     expect(saved.title, phase.title);
     expect(saved.flashcardIds, ['card-1']);
-    expect(saved.challengeIds, ['challenge-1']);
     expect(saved.sortOrder, 4);
     await database.close();
   });
