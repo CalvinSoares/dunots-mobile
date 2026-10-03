@@ -14,7 +14,14 @@ class StudyDocumentViewerPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: Text(document.title)),
-      body: _buildBody(),
+      // Além da navegação do sistema, reserve espaço para a ação flutuante:
+      // o fim de textos e documentos não pode ficar escondido atrás dela.
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.only(bottom: 88),
+          child: _buildBody(),
+        ),
+      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => Navigator.of(context).pop(true),
         icon: const Icon(Icons.check_circle_outline),

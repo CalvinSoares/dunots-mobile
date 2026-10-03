@@ -55,6 +55,9 @@ class SqliteStudyNodeRepository implements StudyNodeRepository {
       'description': node.description,
       'sort_order': node.sortOrder,
       'is_completed': node.isCompleted ? 1 : 0,
+      'status': node.isCompleted
+          ? StudyNodeStatus.completed.index
+          : node.status.index,
       'notes': node.notes,
       'priority': node.priority.index,
       'created_at': (node.createdAt ?? now).toIso8601String(),
@@ -71,6 +74,9 @@ class SqliteStudyNodeRepository implements StudyNodeRepository {
       description: row['description']! as String,
       sortOrder: row['sort_order']! as int,
       isCompleted: row['is_completed'] == 1,
+      status: row['is_completed'] == 1
+          ? StudyNodeStatus.completed
+          : _statusFromValue(row['status']),
       notes: row['notes']! as String,
       priority: _priorityFromValue(row['priority']! as int),
       createdAt: DateTime.tryParse(row['created_at']?.toString() ?? ''),
@@ -84,5 +90,13 @@ class SqliteStudyNodeRepository implements StudyNodeRepository {
     }
 
     return StudyPriority.values[value];
+  }
+
+  StudyNodeStatus _statusFromValue(Object? value) {
+    final index = value is num ? value.toInt() : int.tryParse('$value') ?? 0;
+    if (index < 0 || index >= StudyNodeStatus.values.length) {
+      return StudyNodeStatus.todo;
+    }
+    return StudyNodeStatus.values[index];
   }
 }

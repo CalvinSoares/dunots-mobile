@@ -65,7 +65,7 @@ class StudyTracksController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> createTrack({
+  Future<StudyTrack> createTrack({
     required String title,
     required String description,
   }) async {
@@ -87,6 +87,7 @@ class StudyTracksController extends ChangeNotifier {
 
     await repository.create(track);
     await load();
+    return track;
   }
 
   Future<void> updateTrack({

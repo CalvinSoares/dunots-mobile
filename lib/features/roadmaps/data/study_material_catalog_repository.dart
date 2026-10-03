@@ -2,8 +2,6 @@ import 'package:dunots_mobile/core/models/flashcard.dart';
 import 'package:dunots_mobile/features/flashcards/data/flashcard_repository.dart';
 import 'package:dunots_mobile/features/questions/data/question_repository.dart';
 import 'package:dunots_mobile/features/questions/domain/question.dart';
-import 'package:dunots_mobile/features/diagrams/data/diagram_repository.dart';
-import 'package:dunots_mobile/features/challenges/data/challenge_repository.dart';
 
 import '../domain/study_material.dart';
 import 'study_document_repository.dart';
@@ -12,15 +10,11 @@ import 'study_material_repository.dart';
 class StudyMaterialCatalogRepository implements StudyMaterialRepository {
   final FlashcardRepository flashcardRepository;
   final QuestionRepository questionRepository;
-  final ChallengeRepository? challengeRepository;
-  final DiagramRepository? diagramRepository;
   final StudyDocumentRepository? documentRepository;
 
   StudyMaterialCatalogRepository({
     required this.flashcardRepository,
     required this.questionRepository,
-    this.challengeRepository,
-    this.diagramRepository,
     this.documentRepository,
   });
 
@@ -32,30 +26,10 @@ class StudyMaterialCatalogRepository implements StudyMaterialRepository {
     if (cached != null) return List.unmodifiable(cached);
     final cards = await flashcardRepository.getAll();
     final questions = await questionRepository.getAll();
-    final challenges = await challengeRepository?.getAll() ?? const [];
-    final diagrams = await diagramRepository?.getAll() ?? const [];
     final documents = await documentRepository?.getAll() ?? const [];
     final materials = [
       ...cards.map(_fromFlashcard),
       ...questions.map(_fromQuestion),
-      ...challenges.map(
-        (challenge) => StudyMaterial(
-          id: challenge.id,
-          type: StudyMaterialType.challenge,
-          title: challenge.title,
-          subtitle: 'Desafio · ${challenge.difficulty.name}',
-        ),
-      ),
-      ...diagrams.map(
-        (diagram) => StudyMaterial(
-          id: diagram.id,
-          type: StudyMaterialType.diagram,
-          title: diagram.title,
-          subtitle: diagram.description.isEmpty
-              ? 'Fluxograma'
-              : 'Fluxograma · ${diagram.description}',
-        ),
-      ),
       ...documents.map(
         (document) => StudyMaterial(
           id: document.id,
