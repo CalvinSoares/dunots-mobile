@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../app/dunots_theme.dart';
 import 'data/challenge_repository.dart';
 import 'domain/challenge.dart';
 
@@ -26,67 +27,84 @@ class _ChallengeStudyPageState extends State<ChallengeStudyPage> {
     final challenge = widget.challenge;
     return Scaffold(
       appBar: AppBar(title: const Text('Resolver desafio')),
-      body: ListView(
-        padding: const EdgeInsets.all(20),
-        children: [
-          Text(
-            challenge.title,
-            style: Theme.of(context).textTheme.headlineSmall,
-          ),
-          const SizedBox(height: 20),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Text(
-                challenge.notes.isEmpty
-                    ? 'Tente resolver o desafio e, quando terminar, confira a solução.'
-                    : challenge.notes,
-                style: Theme.of(context).textTheme.bodyLarge,
-              ),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
+          children: [
+            Text(
+              challenge.title,
+              style: Theme.of(context).textTheme.headlineSmall,
             ),
-          ),
-          const SizedBox(height: 16),
-          if (!_solutionVisible)
-            FilledButton.icon(
-              onPressed: () => setState(() => _solutionVisible = true),
-              icon: const Icon(Icons.visibility_outlined),
-              label: const Text('Mostrar solução'),
-            )
-          else ...[
+            const SizedBox(height: 20),
             Card(
-              color: Theme.of(context).colorScheme.surfaceContainerHighest,
               child: Padding(
                 padding: const EdgeInsets.all(16),
-                child: SelectableText(
-                  challenge.solution.isEmpty
-                      ? 'Nenhuma solução cadastrada.'
-                      : challenge.solution,
+                child: Text(
+                  challenge.notes.isEmpty
+                      ? 'Tente resolver o desafio e, quando terminar, confira a solução.'
+                      : challenge.notes,
+                  style: Theme.of(context).textTheme.bodyLarge,
                 ),
               ),
             ),
-            const SizedBox(height: 20),
-            Text('Como foi?', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            if (_saving)
-              const Center(child: CircularProgressIndicator())
-            else
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  _ratingButton('novamente', 'again', Icons.replay, Colors.red),
-                  _ratingButton(
-                    'difícil',
-                    'hard',
-                    Icons.trending_down,
-                    Colors.deepOrange,
+            const SizedBox(height: 16),
+            if (!_solutionVisible)
+              FilledButton.icon(
+                onPressed: () => setState(() => _solutionVisible = true),
+                icon: const Icon(Icons.visibility_outlined),
+                label: const Text('Mostrar solução'),
+              )
+            else ...[
+              Card(
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: SelectableText(
+                    challenge.solution.isEmpty
+                        ? 'Nenhuma solução cadastrada.'
+                        : challenge.solution,
                   ),
-                  _ratingButton('bom', 'medium', Icons.check, Colors.orange),
-                  _ratingButton('fácil', 'easy', Icons.bolt, Colors.green),
-                ],
+                ),
               ),
+              const SizedBox(height: 20),
+              Text('Como foi?', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 8),
+              if (_saving)
+                const Center(child: CircularProgressIndicator())
+              else
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    _ratingButton(
+                      'novamente',
+                      'again',
+                      Icons.replay,
+                      Colors.red,
+                    ),
+                    _ratingButton(
+                      'difícil',
+                      'hard',
+                      Icons.trending_down,
+                      Colors.deepOrange,
+                    ),
+                    _ratingButton(
+                      'bom',
+                      'medium',
+                      Icons.check,
+                      DunotsColors.amber,
+                    ),
+                    _ratingButton(
+                      'fácil',
+                      'easy',
+                      Icons.bolt,
+                      DunotsColors.mint,
+                    ),
+                  ],
+                ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../app/dunots_theme.dart';
 import 'data/challenge_repository.dart';
 import 'domain/challenge.dart';
 
@@ -35,7 +36,9 @@ class _ChallengeStudySessionPageState extends State<ChallengeStudySessionPage> {
     if (widget.challenges.isEmpty) {
       return Scaffold(
         appBar: AppBar(title: const Text('Sessão de desafios')),
-        body: const Center(child: Text('Nenhum desafio nesta sessão.')),
+        body: const SafeArea(
+          child: Center(child: Text('Nenhum desafio nesta sessão.')),
+        ),
       );
     }
     if (_finished) return _buildFinished(context);
@@ -53,80 +56,97 @@ class _ChallengeStudySessionPageState extends State<ChallengeStudySessionPage> {
           ),
         ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
-        children: [
-          LinearProgressIndicator(value: progress.clamp(0, 1)),
-          const SizedBox(height: 24),
-          Text(
-            _current.title,
-            style: Theme.of(context).textTheme.headlineSmall,
-          ),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 8,
-            children: [
-              Chip(label: Text(_current.difficulty.name)),
-              ..._current.tags.map((tag) => Chip(label: Text(tag))),
-            ],
-          ),
-          const SizedBox(height: 18),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Text(
-                _current.notes.isEmpty
-                    ? 'Resolva o desafio antes de revelar a solução.'
-                    : _current.notes,
-                style: Theme.of(context).textTheme.bodyLarge,
-              ),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
+          children: [
+            LinearProgressIndicator(value: progress.clamp(0, 1)),
+            const SizedBox(height: 24),
+            Text(
+              _current.title,
+              style: Theme.of(context).textTheme.headlineSmall,
             ),
-          ),
-          const SizedBox(height: 16),
-          if (!_solutionVisible)
-            FilledButton.icon(
-              onPressed: () => setState(() => _solutionVisible = true),
-              icon: const Icon(Icons.visibility_outlined),
-              label: const Text('Mostrar solução'),
-            )
-          else ...[
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              children: [
+                Chip(label: Text(_current.difficulty.name)),
+                ..._current.tags.map((tag) => Chip(label: Text(tag))),
+              ],
+            ),
+            const SizedBox(height: 18),
             Card(
-              color: Theme.of(context).colorScheme.surfaceContainerHighest,
               child: Padding(
                 padding: const EdgeInsets.all(16),
-                child: SelectableText(
-                  _current.solution.isEmpty
-                      ? 'Nenhuma solução cadastrada.'
-                      : _current.solution,
+                child: Text(
+                  _current.notes.isEmpty
+                      ? 'Resolva o desafio antes de revelar a solução.'
+                      : _current.notes,
+                  style: Theme.of(context).textTheme.bodyLarge,
                 ),
               ),
             ),
-            const SizedBox(height: 18),
-            const Text(
-              'Como foi?',
-              style: TextStyle(fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 10),
-            if (_saving)
-              const Center(child: CircularProgressIndicator())
-            else
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  _ratingButton('novamente', 'again', Icons.replay, Colors.red),
-                  _ratingButton(
-                    'difícil',
-                    'hard',
-                    Icons.trending_down,
-                    Colors.deepOrange,
+            const SizedBox(height: 16),
+            if (!_solutionVisible)
+              FilledButton.icon(
+                onPressed: () => setState(() => _solutionVisible = true),
+                icon: const Icon(Icons.visibility_outlined),
+                label: const Text('Mostrar solução'),
+              )
+            else ...[
+              Card(
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: SelectableText(
+                    _current.solution.isEmpty
+                        ? 'Nenhuma solução cadastrada.'
+                        : _current.solution,
                   ),
-                  _ratingButton('bom', 'medium', Icons.check, Colors.orange),
-                  _ratingButton('fácil', 'easy', Icons.bolt, Colors.green),
-                ],
+                ),
               ),
+              const SizedBox(height: 18),
+              const Text(
+                'Como foi?',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 10),
+              if (_saving)
+                const Center(child: CircularProgressIndicator())
+              else
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    _ratingButton(
+                      'novamente',
+                      'again',
+                      Icons.replay,
+                      Colors.red,
+                    ),
+                    _ratingButton(
+                      'difícil',
+                      'hard',
+                      Icons.trending_down,
+                      Colors.deepOrange,
+                    ),
+                    _ratingButton(
+                      'bom',
+                      'medium',
+                      Icons.check,
+                      DunotsColors.amber,
+                    ),
+                    _ratingButton(
+                      'fácil',
+                      'easy',
+                      Icons.bolt,
+                      DunotsColors.mint,
+                    ),
+                  ],
+                ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
@@ -185,42 +205,44 @@ class _ChallengeStudySessionPageState extends State<ChallengeStudySessionPage> {
   Widget _buildFinished(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Sessão concluída')),
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.emoji_events_outlined,
-                size: 58,
-                color: Theme.of(context).colorScheme.primary,
-              ),
-              const SizedBox(height: 14),
-              Text(
-                'Sessão concluída',
-                style: Theme.of(context).textTheme.headlineSmall,
-              ),
-              const SizedBox(height: 8),
-              Text('${widget.challenges.length} desafios revisados.'),
-              const SizedBox(height: 18),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                alignment: WrapAlignment.center,
-                children: [
-                  Chip(label: Text('Novamente: $_again')),
-                  Chip(label: Text('Difícil: $_hard')),
-                  Chip(label: Text('Bom: $_medium')),
-                  Chip(label: Text('Fácil: $_easy')),
-                ],
-              ),
-              const SizedBox(height: 20),
-              FilledButton(
-                onPressed: () => Navigator.of(context).pop(true),
-                child: const Text('Voltar aos desafios'),
-              ),
-            ],
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.emoji_events_outlined,
+                  size: 58,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  'Sessão concluída',
+                  style: Theme.of(context).textTheme.headlineSmall,
+                ),
+                const SizedBox(height: 8),
+                Text('${widget.challenges.length} desafios revisados.'),
+                const SizedBox(height: 18),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  alignment: WrapAlignment.center,
+                  children: [
+                    Chip(label: Text('Novamente: $_again')),
+                    Chip(label: Text('Difícil: $_hard')),
+                    Chip(label: Text('Bom: $_medium')),
+                    Chip(label: Text('Fácil: $_easy')),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                FilledButton(
+                  onPressed: () => Navigator.of(context).pop(true),
+                  child: const Text('Voltar aos desafios'),
+                ),
+              ],
+            ),
           ),
         ),
       ),

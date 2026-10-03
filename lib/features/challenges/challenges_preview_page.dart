@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../../app/dunots_theme.dart';
 import '../../shared/widgets/study_widgets.dart';
+import '../../shared/widgets/dunots_modal.dart';
 import '../diagrams/data/diagram_repository.dart';
 import '../diagrams/diagram_link_dialog.dart';
 import '../diagrams/domain/study_diagram.dart';
@@ -63,48 +65,71 @@ class _ChallengesPreviewPageState extends State<ChallengesPreviewPage> {
                     item.title.toLowerCase().contains(_search.toLowerCase()),
               )
               .toList(growable: false);
-          return Column(
-            children: [
-              Row(
+          return LayoutBuilder(
+            builder: (context, constraints) {
+              final compact = constraints.maxWidth < 520;
+              return Column(
                 children: [
-                  Expanded(
-                    child: TextField(
-                      decoration: const InputDecoration(
-                        prefixIcon: Icon(Icons.search),
-                        hintText: 'Buscar desafios...',
-                      ),
-                      onChanged: (value) => setState(() => _search = value),
+                  TextField(
+                    decoration: const InputDecoration(
+                      prefixIcon: Icon(Icons.search),
+                      hintText: 'Buscar desafios',
                     ),
+                    onChanged: (value) => setState(() => _search = value),
                   ),
-                  const SizedBox(width: 12),
-                  FilledButton.icon(
-                    onPressed: _create,
-                    icon: const Icon(Icons.add),
-                    label: const Text('Novo desafio'),
-                  ),
+                  const SizedBox(height: 12),
+                  if (compact) ...[
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        onPressed: _create,
+                        icon: const Icon(Icons.add),
+                        label: const Text('Novo desafio'),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: challenges.isEmpty
+                            ? null
+                            : () => _startSession(challenges),
+                        icon: const Icon(Icons.play_arrow),
+                        label: const Text('Praticar resultados'),
+                      ),
+                    ),
+                  ] else
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: challenges.isEmpty
+                                ? null
+                                : () => _startSession(challenges),
+                            icon: const Icon(Icons.play_arrow),
+                            label: const Text('Praticar resultados'),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        FilledButton.icon(
+                          onPressed: _create,
+                          icon: const Icon(Icons.add),
+                          label: const Text('Novo desafio'),
+                        ),
+                      ],
+                    ),
+                  const SizedBox(height: 16),
+                  if (challenges.isEmpty)
+                    const StudyEmptyState(
+                      title: 'Nenhum desafio encontrado.',
+                      detail: 'Cadastre um problema para começar a praticar.',
+                      icon: Icons.code_outlined,
+                    )
+                  else
+                    ...challenges.map(_buildCard),
                 ],
-              ),
-              const SizedBox(height: 12),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: OutlinedButton.icon(
-                  onPressed: challenges.isEmpty
-                      ? null
-                      : () => _startSession(challenges),
-                  icon: const Icon(Icons.play_arrow),
-                  label: const Text('Iniciar sessão com a busca atual'),
-                ),
-              ),
-              const SizedBox(height: 16),
-              if (challenges.isEmpty)
-                const StudyEmptyState(
-                  title: 'Nenhum desafio encontrado.',
-                  detail: 'Cadastre um problema para começar a praticar.',
-                  icon: Icons.code_outlined,
-                )
-              else
-                ...challenges.map(_buildCard),
-            ],
+              );
+            },
           );
         },
       ),
@@ -130,8 +155,8 @@ class _ChallengesPreviewPageState extends State<ChallengesPreviewPage> {
 
   Widget _buildCard(Challenge challenge) {
     final color = switch (challenge.difficulty) {
-      ChallengeDifficulty.easy => Colors.green,
-      ChallengeDifficulty.medium => Colors.orange,
+      ChallengeDifficulty.easy => DunotsColors.mint,
+      ChallengeDifficulty.medium => DunotsColors.amber,
       ChallengeDifficulty.hard => Colors.red,
     };
     return Card(
@@ -174,7 +199,7 @@ class _ChallengesPreviewPageState extends State<ChallengesPreviewPage> {
     final diagrams =
         await widget.diagramRepository?.getAll() ?? const <StudyDiagram>[];
     if (!mounted) return;
-    final data = await showDialog<_ChallengeFormData>(
+    final data = await showDunotsDrawer<_ChallengeFormData>(
       context: context,
       builder: (_) => _ChallengeFormDialog(
         title: 'Novo desafio',
@@ -204,7 +229,7 @@ class _ChallengesPreviewPageState extends State<ChallengesPreviewPage> {
     final diagrams =
         await widget.diagramRepository?.getAll() ?? const <StudyDiagram>[];
     if (!mounted) return;
-    final data = await showDialog<_ChallengeFormData>(
+    final data = await showDunotsDrawer<_ChallengeFormData>(
       context: context,
       builder: (_) => _ChallengeFormDialog(
         title: 'Editar desafio',
@@ -230,21 +255,13 @@ class _ChallengesPreviewPageState extends State<ChallengesPreviewPage> {
   }
 
   Future<void> _delete(Challenge challenge) async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showDunotsDrawer<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Excluir desafio?'),
-        content: Text('O desafio “${challenge.title}” será removido.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Excluir'),
-          ),
-        ],
+      builder: (_) => DunotsConfirmDialog(
+        title: 'Excluir desafio?',
+        message: 'O desafio “${challenge.title}” será removido.',
+        confirmLabel: 'Excluir',
+        icon: Icons.delete_outline,
       ),
     );
     if (confirmed != true) return;
@@ -331,69 +348,91 @@ class _ChallengeFormDialogState extends State<_ChallengeFormDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(widget.title),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: _title,
-              decoration: const InputDecoration(labelText: 'Título *'),
-              onChanged: (_) => setState(() {}),
+    return DunotsModal(
+      title: widget.title,
+      icon: Icons.code_outlined,
+      subtitle: 'Registre o problema, a solução e os pontos de revisão.',
+      // ignore: sort_child_properties_last
+      child: DunotsFormColumn(
+        children: [
+          TextField(
+            controller: _title,
+            autofocus: true,
+            decoration: const InputDecoration(
+              labelText: 'Título *',
+              hintText: 'Ex.: Two Sum',
             ),
-            TextField(
-              controller: _problemId,
-              decoration: const InputDecoration(labelText: 'ID do problema'),
+            onChanged: (_) => setState(() {}),
+          ),
+          TextField(
+            controller: _problemId,
+            decoration: const InputDecoration(
+              labelText: 'ID do problema',
+              hintText: 'Ex.: leetcode-001',
             ),
-            DropdownButtonFormField<ChallengeDifficulty>(
-              initialValue: _difficulty,
-              decoration: const InputDecoration(labelText: 'Dificuldade'),
-              items: ChallengeDifficulty.values
-                  .map(
-                    (item) =>
-                        DropdownMenuItem(value: item, child: Text(item.name)),
-                  )
-                  .toList(),
-              onChanged: (value) =>
-                  setState(() => _difficulty = value ?? _difficulty),
-            ),
-            Align(
+          ),
+          DropdownButtonFormField<ChallengeDifficulty>(
+            initialValue: _difficulty,
+            decoration: const InputDecoration(labelText: 'Dificuldade'),
+            items: ChallengeDifficulty.values
+                .map(
+                  (item) =>
+                      DropdownMenuItem(value: item, child: Text(item.name)),
+                )
+                .toList(),
+            onChanged: (value) =>
+                setState(() => _difficulty = value ?? _difficulty),
+          ),
+          OutlinedButton.icon(
+            onPressed: widget.availableDiagrams.isEmpty
+                ? null
+                : _chooseDiagrams,
+            icon: const Icon(Icons.account_tree_outlined),
+            label: Align(
               alignment: Alignment.centerLeft,
-              child: OutlinedButton.icon(
-                onPressed: widget.availableDiagrams.isEmpty
-                    ? null
-                    : _chooseDiagrams,
-                icon: const Icon(Icons.account_tree_outlined),
-                label: Text(
-                  _linkedDiagramIds.isEmpty
-                      ? 'Vincular fluxogramas'
-                      : 'Fluxogramas vinculados: ${_linkedDiagramIds.length}',
-                ),
+              child: Text(
+                _linkedDiagramIds.isEmpty
+                    ? 'Vincular fluxogramas'
+                    : 'Fluxogramas vinculados: ${_linkedDiagramIds.length}',
+                overflow: TextOverflow.ellipsis,
               ),
             ),
-            TextField(
-              controller: _tags,
-              decoration: const InputDecoration(
-                labelText: 'Tags (separadas por vírgula)',
-              ),
+          ),
+          TextField(
+            controller: _tags,
+            decoration: const InputDecoration(
+              labelText: 'Tags',
+              hintText: 'redes, grafos, algoritmos',
+              helperText: 'Separe as tags por vírgula.',
             ),
-            TextField(
-              controller: _strategy,
-              decoration: const InputDecoration(labelText: 'Estratégia'),
+          ),
+          TextField(
+            controller: _strategy,
+            decoration: const InputDecoration(
+              labelText: 'Estratégia',
+              hintText: 'Como você pretende resolver?',
             ),
-            TextField(
-              controller: _solution,
-              decoration: const InputDecoration(labelText: 'Solução'),
-              maxLines: 4,
+            maxLines: 3,
+          ),
+          TextField(
+            controller: _solution,
+            decoration: const InputDecoration(
+              labelText: 'Solução',
+              alignLabelWithHint: true,
             ),
-            TextField(
-              controller: _notes,
-              decoration: const InputDecoration(labelText: 'Anotações'),
-              maxLines: 3,
+            minLines: 5,
+            maxLines: 10,
+          ),
+          TextField(
+            controller: _notes,
+            decoration: const InputDecoration(
+              labelText: 'Anotações',
+              alignLabelWithHint: true,
             ),
-          ],
-        ),
+            minLines: 3,
+            maxLines: 6,
+          ),
+        ],
       ),
       actions: [
         TextButton(
@@ -427,7 +466,7 @@ class _ChallengeFormDialogState extends State<_ChallengeFormDialog> {
   }
 
   Future<void> _chooseDiagrams() async {
-    final selected = await showDialog<List<String>>(
+    final selected = await showDunotsDrawer<List<String>>(
       context: context,
       builder: (_) => DiagramLinkDialog(
         diagrams: widget.availableDiagrams,
