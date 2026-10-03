@@ -1,14 +1,17 @@
 # Dunots Mobile
 
-Aplicativo Flutter do Dunots. Este projeto começa como um laboratório de aprendizado: cada etapa adiciona uma parte real do produto, mantendo o desktop intacto.
+Aplicativo Flutter do Dunots, mantido como repositório independente do desktop.
+O mobile é Android-first, offline-first e usa SQLite local, com contrato de
+sincronização compatível com desktop/web.
 
-## Fase atual: base visual
+## Estado atual
 
-- Projeto Android criado com Flutter.
-- Navegação inferior com Hoje, Cards, Trilhas e Mais.
-- Tema visual inicial do Dunots.
-- Dados fictícios para praticar widgets e layout.
-- Nenhum banco ou estado persistente foi conectado ainda.
+- Release instalável atual: `0.1.0+1`.
+- Navegação para Hoje, Estudar, Questões e Trilhas.
+- Flashcards com SRS, sessões, histórico, progresso e metas.
+- Trilhas com tópicos, subtópicos, materiais, documentos e progresso.
+- Simulados, importação de questões e persistência local.
+- Sincronização por pacote, backup, conflitos e rede local em evolução.
 
 ## Executar
 
@@ -17,12 +20,26 @@ flutter pub get
 flutter run
 ```
 
-## Próximo exercício
+## Validar
 
-1. Alterar um texto da tela Hoje.
-2. Alterar uma cor do tema.
-3. Criar um novo `Widget` de resumo.
-4. Adicionar uma quinta ação à tela inicial.
-5. Executar novamente com hot reload.
+```bash
+dart format lib test
+flutter analyze
+flutter test
+```
 
-Depois desses exercícios, a próxima etapa será separar o aplicativo em arquivos por feature e criar o primeiro modelo Dart de flashcard.
+## Gerar APK
+
+```bash
+flutter build apk --release
+```
+
+O APK é gerado em `build/app/outputs/flutter-apk/`. A assinatura atual é para
+instalação pessoal; a assinatura de publicação será configurada antes da Play
+Store.
+
+## Documentação
+
+Consulte [`docs/README.md`](docs/README.md) para o índice. O padrão visual está
+em [`docs/design.md`](docs/design.md), e as regras de colaboração em
+[`AGENTS.md`](AGENTS.md).

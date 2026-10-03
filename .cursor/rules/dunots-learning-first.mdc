@@ -1,5 +1,5 @@
 ---
-description: Define the implementation and validation workflow for Dunots Mobile.
+description: Define the implementation, design and validation workflow for Dunots Mobile.
 alwaysApply: true
 ---
 
@@ -9,8 +9,13 @@ alwaysApply: true
 - Keep mobile and desktop changes separate.
 - Preserve the dependency order: leaf files, feature screens, shell, app configuration, entry point.
 - Keep tests under test/ and production code under lib/.
+- Follow docs/design.md for colors, actions, modals and responsive layouts.
+- Prefer the global DunotsColors theme over literal colors in feature widgets.
+- Keep one primary action per section and compact secondary actions on small screens.
+- Test compact layouts around 360 px wide when a screen contains rows, buttons or filters.
 - Run formatting, static analysis, tests, and builds appropriate to the change.
 - Fix blocking validation errors before reporting completion.
 - Do not create commits or push. Provide granular Git commands for the user.
 - Separate commits by responsibility and never include unrelated desktop changes.
 - Update docs/plan.md, docs/checks.md, or docs/decisions.md when the project direction changes.
+- Update docs/design.md when a reusable visual or responsive convention changes.

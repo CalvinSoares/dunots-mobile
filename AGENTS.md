@@ -1,41 +1,76 @@
-# Dunots Mobile — regras de colaboração
+# Dunots Mobile — instruções do projeto
 
-## Fluxo principal
+## Escopo
 
-O assistente é responsável por analisar, implementar, testar e revisar o código. O usuário revisa as mudanças e executa os comandos Git de salvamento e envio.
+- Este diretório é um repositório Flutter independente do desktop.
+- Alterações em `mobile/` não devem editar o desktop, salvo solicitação explícita.
+- O produto é offline-first: o uso principal deve continuar funcionando sem internet.
 
-## Responsabilidades do assistente
+## Fontes de decisão
 
-- Implementar as mudanças solicitadas no projeto mobile.
-- Não alterar o aplicativo desktop sem solicitação específica.
-- Respeitar a separação do diretório mobile como repositório independente.
-- Executar formatador, análise estática, testes e builds adequados ao risco.
-- Corrigir os problemas encontrados antes de encerrar uma etapa.
-- Explicar o resultado, os arquivos alterados e qualquer limitação.
-- Nunca criar commits nem executar push.
-- Ao final de cada etapa, fornecer comandos de commits granulares.
+- `README.md`: visão geral, comandos e estado da release.
+- `docs/plan.md`: sequência de implementação e pendências.
+- `docs/architecture.md`: camadas, persistência e limites técnicos.
+- `docs/design.md`: padrão visual e regras de responsividade.
+- `docs/checks.md`: validações executadas e seus resultados.
+- `docs/decisions.md`: decisões arquiteturais aceitas ou propostas.
+- `docs/parity.md`: comparação de funcionalidades com desktop/web.
+- `.cursor/rules/`: regras automáticas de colaboração do repositório.
+
+Quando duas descrições divergirem, atualize a documentação afetada e registre a
+decisão em `docs/decisions.md` antes de criar uma nova convenção.
 
 ## Ordem segura de implementação
 
-- Criar primeiro arquivos sem dependências internas.
-- Criar depois arquivos que dependem deles.
-- Manter o aplicativo compilável entre as etapas.
-- Não importar arquivo que ainda não existe.
-- Colocar testes em test/, nunca em lib/.
-- Validar cada grupo de alterações antes de iniciar o próximo.
+1. Modelos, contratos e funções puras.
+2. Repositórios e migrações.
+3. Componentes e telas de feature.
+4. Shell, injeção de dependências e ponto de entrada.
+5. Testes da unidade alterada e testes de integração afetados.
+6. Documentação e validação final.
 
-## Commits
+Não importar um arquivo antes de ele existir. Manter produção em `lib/` e testes
+em `test/`.
 
-Separar por responsabilidade:
+## Padrão de interface
 
-- modelo ou regra de domínio;
-- tela ou componente;
-- persistência;
-- testes;
-- documentação.
+- Seguir `docs/design.md` antes de criar cores, espaçamentos ou componentes novos.
+- Preferir tokens de `DunotsColors` e o tema global a cores literais.
+- Usar uma ação primária por seção; ações secundárias devem ser compactas.
+- Botões de ícone precisam de `tooltip` e ações importantes precisam de rótulo.
+- Garantir alvo de toque confortável, texto curto e layout válido em telas de
+  360 px de largura e em landscape.
+- Não usar `Expanded` dentro de eixos com altura não limitada, como colunas dentro
+  de `SingleChildScrollView`.
+- Loading, erro e vazio devem ser centralizados quando ocuparem uma tela inteira;
+  erros precisam oferecer retry quando a operação puder ser repetida.
 
-O usuário deve revisar o diff antes de executar os commits.
+## Persistência e compatibilidade
 
-## Documentação
+- Usar repositórios, não acessar SQLite diretamente na UI.
+- Toda alteração de schema precisa de migração e teste de banco antigo.
+- Preservar IDs, datas, campos opcionais, versões de contrato e tombstones do
+  sincronizador desktop/mobile.
 
-O plano atual está em docs/plan.md. O estado de validação está em docs/checks.md. Decisões arquiteturais ficam em docs/decisions.md.
+## Validação
+
+Executar o conjunto adequado à alteração:
+
+```bash
+dart format lib test
+flutter analyze
+flutter test
+flutter build apk --debug
+```
+
+O build de release deve ser executado quando a alteração afetar Android,
+dependências, versão ou distribuição.
+
+## Git e entrega
+
+- O assistente implementa, testa e revisa; o usuário executa commits e push.
+- Nunca criar commits nem fazer push automaticamente.
+- Entregar comandos de commits granulares, separados por responsabilidade e,
+  preferencialmente, com no máximo cinco arquivos por commit.
+- Não usar `git add .`; listar explicitamente os arquivos.
+- Documentação em `docs/` é mantida localmente e permanece ignorada pelo Git.
