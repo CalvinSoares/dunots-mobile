@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../shared/widgets/dunots_modal.dart';
 import 'domain/quiz_exam.dart';
 
 class QuizExamFormData {
@@ -65,94 +66,64 @@ class _QuizExamFormDialogState extends State<QuizExamFormDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(isEditing ? 'Editar prova/vaga' : 'Nova prova/vaga'),
-      content: SizedBox(
-        width: 560,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: titleController,
-                decoration: const InputDecoration(
-                  labelText: 'Prova *',
-                  hintText: 'Ex.: Transpetro 2023',
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: contestController,
-                decoration: const InputDecoration(labelText: 'Concurso'),
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: vacancyController,
-                      decoration: const InputDecoration(labelText: 'Cargo'),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: TextField(
-                      controller: boardController,
-                      decoration: const InputDecoration(labelText: 'Banca'),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: yearController,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(labelText: 'Ano'),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: TextField(
-                      controller: versionController,
-                      decoration: const InputDecoration(labelText: 'Versão'),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: sourceController,
-                decoration: const InputDecoration(
-                  labelText: 'Fonte',
-                  hintText: 'Ex.: PDF da banca',
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: answerKeyController,
-                decoration: const InputDecoration(
-                  labelText: 'Gabarito',
-                  hintText: 'Ex.: gabarito-prova-6.pdf',
-                ),
-              ),
-              if (validationError != null) ...[
-                const SizedBox(height: 12),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    validationError!,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
-                    ),
-                  ),
-                ),
-              ],
-            ],
+    return DunotsModal(
+      title: isEditing ? 'Editar prova/vaga' : 'Nova prova/vaga',
+      subtitle: 'Identifique a prova para organizar questões e gabaritos.',
+      icon: Icons.folder_outlined,
+      // ignore: sort_child_properties_last
+      child: DunotsFormColumn(
+        children: [
+          TextField(
+            controller: titleController,
+            decoration: const InputDecoration(
+              labelText: 'Prova *',
+              hintText: 'Ex.: Transpetro 2023',
+            ),
           ),
-        ),
+          TextField(
+            controller: contestController,
+            decoration: const InputDecoration(labelText: 'Concurso'),
+          ),
+          TextField(
+            controller: vacancyController,
+            decoration: const InputDecoration(labelText: 'Cargo/vaga'),
+          ),
+          TextField(
+            controller: boardController,
+            decoration: const InputDecoration(labelText: 'Banca'),
+          ),
+          TextField(
+            controller: yearController,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(labelText: 'Ano'),
+          ),
+          TextField(
+            controller: versionController,
+            decoration: const InputDecoration(labelText: 'Versão'),
+          ),
+          TextField(
+            controller: sourceController,
+            decoration: const InputDecoration(
+              labelText: 'Fonte',
+              hintText: 'Ex.: PDF da banca',
+            ),
+          ),
+          TextField(
+            controller: answerKeyController,
+            decoration: const InputDecoration(
+              labelText: 'Gabarito',
+              hintText: 'Ex.: gabarito-prova-6.pdf',
+            ),
+          ),
+          if (validationError != null)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                validationError!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            ),
+        ],
       ),
       actions: [
         TextButton(

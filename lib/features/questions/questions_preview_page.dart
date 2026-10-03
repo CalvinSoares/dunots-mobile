@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../app/dunots_theme.dart';
+import '../../shared/widgets/dunots_modal.dart';
 import '../../shared/widgets/study_widgets.dart';
 import '../quizzes/data/quiz_attempt_repository.dart';
 import '../quizzes/domain/quiz_attempt.dart';
@@ -19,12 +21,14 @@ import 'pdf_question_import_dialog.dart';
 import '../quizzes/quiz_pdf_export_service.dart';
 
 class QuestionsPreviewPage extends StatefulWidget {
+  final bool showHeader;
   final QuestionRepository? repository;
   final QuizAttemptRepository? attemptRepository;
   final QuizExamRepository? examRepository;
 
   const QuestionsPreviewPage({
     super.key,
+    this.showHeader = true,
     this.repository,
     this.attemptRepository,
     this.examRepository,
@@ -67,51 +71,91 @@ class _QuestionsPreviewPageState extends State<QuestionsPreviewPage> {
       icon: Icons.quiz_outlined,
       title: 'Questões',
       subtitle: 'Cadastre, revise e organize suas questões.',
+      showHeader: widget.showHeader,
       child: Column(
         children: [
-          Wrap(
-            alignment: WrapAlignment.end,
-            spacing: 8,
-            runSpacing: 8,
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               FilledButton.icon(
                 onPressed: _createQuestion,
                 icon: const Icon(Icons.add),
                 label: const Text('Nova questão'),
               ),
-              OutlinedButton.icon(
-                onPressed: _createQuestionsInBulk,
-                icon: const Icon(Icons.playlist_add),
-                label: const Text('Cadastro em massa'),
-              ),
-              OutlinedButton.icon(
-                onPressed: _importPdf,
-                icon: const Icon(Icons.picture_as_pdf_outlined),
-                label: const Text('Importar PDF'),
-              ),
-              OutlinedButton.icon(
-                onPressed: _openExams,
-                icon: const Icon(Icons.folder_outlined),
-                label: const Text('Provas/vagas'),
-              ),
-              OutlinedButton.icon(
-                onPressed: () {
-                  setState(() {
-                    _selectionMode = !_selectionMode;
-                    if (!_selectionMode) {
-                      _selectedQuestionIds.clear();
-                    }
-                  });
+              StudyContextMenu<String>(
+                tooltip: 'Mais ações das questões',
+                onSelected: (value) {
+                  switch (value) {
+                    case 'refresh':
+                      setState(_reload);
+                    case 'bulk':
+                      _createQuestionsInBulk();
+                    case 'pdf':
+                      _importPdf();
+                    case 'exams':
+                      _openExams();
+                    case 'history':
+                      _openHistory();
+                    case 'selection':
+                      _toggleSelectionMode();
+                  }
                 },
-                icon: Icon(
-                  _selectionMode ? Icons.close : Icons.checklist_outlined,
-                ),
-                label: Text(_selectionMode ? 'Cancelar' : 'Selecionar'),
-              ),
-              OutlinedButton.icon(
-                onPressed: _openHistory,
-                icon: const Icon(Icons.history),
-                label: const Text('Histórico'),
+                itemBuilder: (context) => [
+                  const PopupMenuItem(
+                    value: 'refresh',
+                    child: ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(Icons.refresh),
+                      title: Text('Atualizar questões'),
+                    ),
+                  ),
+                  const PopupMenuItem(
+                    value: 'bulk',
+                    child: ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(Icons.playlist_add),
+                      title: Text('Cadastro em massa'),
+                    ),
+                  ),
+                  const PopupMenuItem(
+                    value: 'pdf',
+                    child: ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(Icons.picture_as_pdf_outlined),
+                      title: Text('Importar PDF'),
+                    ),
+                  ),
+                  const PopupMenuItem(
+                    value: 'exams',
+                    child: ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(Icons.folder_outlined),
+                      title: Text('Provas e vagas'),
+                    ),
+                  ),
+                  const PopupMenuItem(
+                    value: 'history',
+                    child: ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(Icons.history),
+                      title: Text('Histórico'),
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: 'selection',
+                    child: ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(
+                        _selectionMode ? Icons.close : Icons.checklist_outlined,
+                      ),
+                      title: Text(
+                        _selectionMode
+                            ? 'Sair da seleção'
+                            : 'Selecionar questões',
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -181,6 +225,14 @@ class _QuestionsPreviewPageState extends State<QuestionsPreviewPage> {
               final activeVersion = versions.contains(_selectedVersion)
                   ? _selectedVersion
                   : null;
+              final activeFilterCount = [
+                activeContest,
+                activeRole,
+                activeExamId,
+                activeBoard,
+                activeYear,
+                activeVersion,
+              ].where((value) => value != null).length;
               final visibleQuestions = QuestionFilters(
                 search: _search,
                 contest: activeContest,
@@ -191,182 +243,60 @@ class _QuestionsPreviewPageState extends State<QuestionsPreviewPage> {
                 proofVersion: activeVersion,
               ).apply(questions, exams: _exams);
               return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  TextField(
-                    decoration: const InputDecoration(
-                      labelText: 'Buscar questões',
-                      hintText: 'Número, enunciado, cargo ou concurso',
-                      prefixIcon: Icon(Icons.search),
-                    ),
-                    onChanged: (value) => setState(() => _search = value),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: StudySearchField(
+                          hintText: 'Buscar questões',
+                          query: _search,
+                          onChanged: (value) => setState(() => _search = value),
+                          onClear: () => setState(() => _search = ''),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      StudyFilterButton(
+                        active: activeFilterCount > 0,
+                        tooltip: 'Filtrar questões',
+                        onPressed: () => _showQuestionFilters(
+                          contests: contests,
+                          roles: roles,
+                          exams: _exams,
+                          examIds: examIds,
+                          boards: boards,
+                          years: years,
+                          versions: versions,
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 12),
                   Row(
                     children: [
                       Expanded(
-                        child: DropdownButtonFormField<String?>(
-                          initialValue: activeContest,
-                          decoration: const InputDecoration(
-                            labelText: 'Concurso',
+                        child: Text(
+                          _selectionMode
+                              ? '${_selectedQuestionIds.length} selecionada(s) · ${visibleQuestions.length} visíveis'
+                              : '${visibleQuestions.length} de ${questions.length} questões',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: DunotsColors.muted,
+                            fontSize: 12,
                           ),
-                          items: [
-                            const DropdownMenuItem<String?>(
-                              value: null,
-                              child: Text('Todos'),
-                            ),
-                            ...contests.map(
-                              (value) => DropdownMenuItem<String?>(
-                                value: value,
-                                child: Text(value),
-                              ),
-                            ),
-                          ],
-                          onChanged: (value) =>
-                              setState(() => _selectedContest = value),
                         ),
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: DropdownButtonFormField<String?>(
-                          initialValue: activeRole,
-                          decoration: const InputDecoration(labelText: 'Cargo'),
-                          items: [
-                            const DropdownMenuItem<String?>(
-                              value: null,
-                              child: Text('Todos'),
-                            ),
-                            ...roles.map(
-                              (value) => DropdownMenuItem<String?>(
-                                value: value,
-                                child: Text(value),
-                              ),
-                            ),
-                          ],
-                          onChanged: (value) =>
-                              setState(() => _selectedRole = value),
+                      if (visibleQuestions.isNotEmpty)
+                        IconButton.filledTonal(
+                          tooltip: 'Exportar prova em PDF',
+                          onPressed: () => _exportExam(visibleQuestions),
+                          icon: const Icon(Icons.picture_as_pdf_outlined),
                         ),
-                      ),
                     ],
-                  ),
-                  const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 12,
-                    runSpacing: 12,
-                    children: [
-                      SizedBox(
-                        width: 260,
-                        child: DropdownButtonFormField<String?>(
-                          initialValue: activeExamId,
-                          decoration: const InputDecoration(
-                            labelText: 'Prova/vaga',
-                          ),
-                          items: [
-                            const DropdownMenuItem<String?>(
-                              value: null,
-                              child: Text('Todas'),
-                            ),
-                            ..._exams
-                                .where((exam) => examIds.contains(exam.id))
-                                .map(
-                                  (exam) => DropdownMenuItem<String?>(
-                                    value: exam.id,
-                                    child: Text(
-                                      '${exam.title} · ${exam.vacancy}',
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                ),
-                          ],
-                          onChanged: (value) =>
-                              setState(() => _selectedExamId = value),
-                        ),
-                      ),
-                      SizedBox(
-                        width: 180,
-                        child: DropdownButtonFormField<String?>(
-                          initialValue: activeBoard,
-                          decoration: const InputDecoration(labelText: 'Banca'),
-                          items: [
-                            const DropdownMenuItem<String?>(
-                              value: null,
-                              child: Text('Todas'),
-                            ),
-                            ...boards.map(
-                              (value) => DropdownMenuItem<String?>(
-                                value: value,
-                                child: Text(value),
-                              ),
-                            ),
-                          ],
-                          onChanged: (value) =>
-                              setState(() => _selectedBoard = value),
-                        ),
-                      ),
-                      SizedBox(
-                        width: 140,
-                        child: DropdownButtonFormField<int?>(
-                          initialValue: activeYear,
-                          decoration: const InputDecoration(labelText: 'Ano'),
-                          items: [
-                            const DropdownMenuItem<int?>(
-                              value: null,
-                              child: Text('Todos'),
-                            ),
-                            ...years.map(
-                              (value) => DropdownMenuItem<int?>(
-                                value: value,
-                                child: Text('$value'),
-                              ),
-                            ),
-                          ],
-                          onChanged: (value) =>
-                              setState(() => _selectedYear = value),
-                        ),
-                      ),
-                      SizedBox(
-                        width: 180,
-                        child: DropdownButtonFormField<String?>(
-                          initialValue: activeVersion,
-                          decoration: const InputDecoration(
-                            labelText: 'Versão',
-                          ),
-                          items: [
-                            const DropdownMenuItem<String?>(
-                              value: null,
-                              child: Text('Todas'),
-                            ),
-                            ...versions.map(
-                              (value) => DropdownMenuItem<String?>(
-                                value: value,
-                                child: Text(value),
-                              ),
-                            ),
-                          ],
-                          onChanged: (value) =>
-                              setState(() => _selectedVersion = value),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      '${visibleQuestions.length} de ${questions.length} questões',
-                      style: const TextStyle(color: Color(0xFFB6B7AD)),
-                    ),
                   ),
                   const SizedBox(height: 10),
-                  if (visibleQuestions.isNotEmpty)
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: OutlinedButton.icon(
-                        onPressed: () => _exportExam(visibleQuestions),
-                        icon: const Icon(Icons.picture_as_pdf_outlined),
-                        label: const Text('Exportar prova filtrada'),
-                      ),
-                    ),
-                  if (visibleQuestions.isNotEmpty) const SizedBox(height: 10),
                   if (_selectionMode && _selectedQuestionIds.isNotEmpty) ...[
                     SizedBox(
                       width: double.infinity,
@@ -417,11 +347,240 @@ class _QuestionsPreviewPageState extends State<QuestionsPreviewPage> {
     );
   }
 
+  Future<void> _showQuestionFilters({
+    required List<String> contests,
+    required List<String> roles,
+    required List<QuizExam> exams,
+    required List<String> examIds,
+    required List<String> boards,
+    required List<int> years,
+    required List<String> versions,
+  }) async {
+    var contest = _selectedContest;
+    var role = _selectedRole;
+    var examId = _selectedExamId;
+    var board = _selectedBoard;
+    var year = _selectedYear;
+    var version = _selectedVersion;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          void update(VoidCallback localUpdate, VoidCallback pageUpdate) {
+            setSheetState(localUpdate);
+            setState(pageUpdate);
+          }
+
+          return SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 36,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Theme.of(sheetContext).colorScheme.outline,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Filtrar questões',
+                    style: Theme.of(sheetContext).textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<String?>(
+                    initialValue: contest,
+                    decoration: const InputDecoration(labelText: 'Concurso'),
+                    items: [
+                      const DropdownMenuItem<String?>(
+                        value: null,
+                        child: Text('Todos'),
+                      ),
+                      ...contests.map(
+                        (value) => DropdownMenuItem<String?>(
+                          value: value,
+                          child: Text(value),
+                        ),
+                      ),
+                    ],
+                    onChanged: (value) => update(
+                      () => contest = value,
+                      () => _selectedContest = value,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String?>(
+                    initialValue: role,
+                    decoration: const InputDecoration(labelText: 'Cargo'),
+                    items: [
+                      const DropdownMenuItem<String?>(
+                        value: null,
+                        child: Text('Todos'),
+                      ),
+                      ...roles.map(
+                        (value) => DropdownMenuItem<String?>(
+                          value: value,
+                          child: Text(value),
+                        ),
+                      ),
+                    ],
+                    onChanged: (value) =>
+                        update(() => role = value, () => _selectedRole = value),
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String?>(
+                    initialValue: examId,
+                    decoration: const InputDecoration(labelText: 'Prova/vaga'),
+                    items: [
+                      const DropdownMenuItem<String?>(
+                        value: null,
+                        child: Text('Todas'),
+                      ),
+                      ...exams
+                          .where((exam) => examIds.contains(exam.id))
+                          .map(
+                            (exam) => DropdownMenuItem<String?>(
+                              value: exam.id,
+                              child: Text(
+                                '${exam.title} · ${exam.vacancy}',
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ),
+                    ],
+                    onChanged: (value) => update(
+                      () => examId = value,
+                      () => _selectedExamId = value,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String?>(
+                    initialValue: board,
+                    decoration: const InputDecoration(labelText: 'Banca'),
+                    items: [
+                      const DropdownMenuItem<String?>(
+                        value: null,
+                        child: Text('Todas'),
+                      ),
+                      ...boards.map(
+                        (value) => DropdownMenuItem<String?>(
+                          value: value,
+                          child: Text(value),
+                        ),
+                      ),
+                    ],
+                    onChanged: (value) => update(
+                      () => board = value,
+                      () => _selectedBoard = value,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<int?>(
+                    initialValue: year,
+                    decoration: const InputDecoration(labelText: 'Ano'),
+                    items: [
+                      const DropdownMenuItem<int?>(
+                        value: null,
+                        child: Text('Todos'),
+                      ),
+                      ...years.map(
+                        (value) => DropdownMenuItem<int?>(
+                          value: value,
+                          child: Text('$value'),
+                        ),
+                      ),
+                    ],
+                    onChanged: (value) =>
+                        update(() => year = value, () => _selectedYear = value),
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String?>(
+                    initialValue: version,
+                    decoration: const InputDecoration(labelText: 'Versão'),
+                    items: [
+                      const DropdownMenuItem<String?>(
+                        value: null,
+                        child: Text('Todas'),
+                      ),
+                      ...versions.map(
+                        (value) => DropdownMenuItem<String?>(
+                          value: value,
+                          child: Text(value),
+                        ),
+                      ),
+                    ],
+                    onChanged: (value) => update(
+                      () => version = value,
+                      () => _selectedVersion = value,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextButton(
+                          onPressed: () {
+                            setSheetState(() {
+                              contest = null;
+                              role = null;
+                              examId = null;
+                              board = null;
+                              year = null;
+                              version = null;
+                            });
+                            _clearFilters();
+                          },
+                          child: const Text('Limpar filtros'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: FilledButton(
+                          onPressed: () => Navigator.of(sheetContext).pop(),
+                          child: const Text('Concluir'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   void _reload() {
     _questionsFuture = _repository.getAll();
     _examsFuture = _examRepository.getAll();
     _examsFuture.then((exams) {
       if (mounted) setState(() => _exams = exams);
+    });
+  }
+
+  void _toggleSelectionMode() {
+    setState(() {
+      _selectionMode = !_selectionMode;
+      if (!_selectionMode) _selectedQuestionIds.clear();
+    });
+  }
+
+  void _clearFilters() {
+    setState(() {
+      _selectedContest = null;
+      _selectedRole = null;
+      _selectedExamId = null;
+      _selectedBoard = null;
+      _selectedYear = null;
+      _selectedVersion = null;
     });
   }
 
@@ -450,12 +609,13 @@ class _QuestionsPreviewPageState extends State<QuestionsPreviewPage> {
       ..sort();
   }
 
-  Future<void> _createQuestion() async {
+  Future<void> _createQuestion({QuizExam? initialExam}) async {
     final exams = await _examsFuture;
     if (!mounted) return;
-    final data = await showDialog<QuestionFormData>(
+    final data = await showDunotsDrawer<QuestionFormData>(
       context: context,
-      builder: (_) => QuestionFormDialog(exams: exams),
+      builder: (_) =>
+          QuestionFormDialog(exams: exams, initialExamId: initialExam?.id),
     );
     if (data == null || !mounted) {
       return;
@@ -466,7 +626,7 @@ class _QuestionsPreviewPageState extends State<QuestionsPreviewPage> {
   Future<void> _createQuestionsInBulk() async {
     final exams = await _examsFuture;
     if (!mounted) return;
-    final data = await showDialog<QuestionBulkFormData>(
+    final data = await showDunotsDrawer<QuestionBulkFormData>(
       context: context,
       builder: (_) => QuestionBulkFormDialog(exams: exams),
     );
@@ -477,7 +637,7 @@ class _QuestionsPreviewPageState extends State<QuestionsPreviewPage> {
   Future<void> _importPdf() async {
     final exams = await _examsFuture;
     if (!mounted) return;
-    final data = await showDialog<PdfQuestionImportData>(
+    final data = await showDunotsDrawer<PdfQuestionImportData>(
       context: context,
       builder: (_) => PdfQuestionImportDialog(exams: exams),
     );
@@ -486,7 +646,7 @@ class _QuestionsPreviewPageState extends State<QuestionsPreviewPage> {
   }
 
   Future<void> _createQuiz() async {
-    final data = await showDialog<QuizFormData>(
+    final data = await showDunotsDrawer<QuizFormData>(
       context: context,
       builder: (_) => const QuizFormDialog(),
     );
@@ -574,7 +734,7 @@ class _QuestionsPreviewPageState extends State<QuestionsPreviewPage> {
   Future<void> _editQuestion(Question question) async {
     final exams = await _examsFuture;
     if (!mounted) return;
-    final data = await showDialog<QuestionFormData>(
+    final data = await showDunotsDrawer<QuestionFormData>(
       context: context,
       builder: (_) =>
           QuestionFormDialog(initialQuestion: question, exams: exams),
@@ -586,9 +746,15 @@ class _QuestionsPreviewPageState extends State<QuestionsPreviewPage> {
   }
 
   Future<void> _openExams() async {
-    await showDialog<void>(
+    await showDunotsDrawer<void>(
       context: context,
-      builder: (_) => QuizExamListDialog(repository: _examRepository),
+      builder: (_) => QuizExamListDialog(
+        repository: _examRepository,
+        onCreateQuestion: (exam) async {
+          if (mounted) Navigator.of(context).pop();
+          await _createQuestion(initialExam: exam);
+        },
+      ),
     );
     if (mounted) setState(_reload);
   }
@@ -608,21 +774,12 @@ class _QuestionsPreviewPageState extends State<QuestionsPreviewPage> {
   }
 
   Future<void> _confirmDelete(Question question) async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showDunotsDrawer<bool>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Excluir questão?'),
-        content: const Text('Esta questão será removida do dispositivo.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Excluir'),
-          ),
-        ],
+      builder: (_) => const DunotsConfirmDialog(
+        title: 'Excluir questão?',
+        message: 'Esta questão será removida do dispositivo.',
+        confirmLabel: 'Excluir',
       ),
     );
     if (confirmed == true && mounted) {

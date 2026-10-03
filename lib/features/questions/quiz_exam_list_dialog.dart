@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../shared/widgets/dunots_modal.dart';
 import '../../shared/widgets/study_widgets.dart';
 import 'data/quiz_exam_repository.dart';
 import 'domain/quiz_exam.dart';
@@ -7,8 +8,13 @@ import 'quiz_exam_form_dialog.dart';
 
 class QuizExamListDialog extends StatefulWidget {
   final QuizExamRepository repository;
+  final Future<void> Function(QuizExam exam)? onCreateQuestion;
 
-  const QuizExamListDialog({super.key, required this.repository});
+  const QuizExamListDialog({
+    super.key,
+    required this.repository,
+    this.onCreateQuestion,
+  });
 
   @override
   State<QuizExamListDialog> createState() => _QuizExamListDialogState();
@@ -25,11 +31,15 @@ class _QuizExamListDialogState extends State<QuizExamListDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Provas e vagas'),
-      content: SizedBox(
-        width: 620,
-        height: 460,
+    return DunotsModal(
+      title: 'Provas e vagas',
+      subtitle: 'Gerencie os agrupadores usados pelas suas questões.',
+      icon: Icons.folder_outlined,
+      scrollable: false,
+      // ignore: sort_child_properties_last
+      child: SizedBox(
+        width: double.infinity,
+        height: MediaQuery.sizeOf(context).height * 0.48,
         child: FutureBuilder<List<QuizExam>>(
           future: _examsFuture,
           builder: (context, snapshot) {
@@ -69,6 +79,12 @@ class _QuizExamListDialogState extends State<QuizExamListDialog> {
                     ),
                     trailing: Wrap(
                       children: [
+                        if (widget.onCreateQuestion != null)
+                          IconButton(
+                            tooltip: 'Adicionar questão a esta prova',
+                            onPressed: () => widget.onCreateQuestion!(exam),
+                            icon: const Icon(Icons.add_circle_outline),
+                          ),
                         IconButton(
                           tooltip: 'Editar prova',
                           onPressed: () => _edit(exam),
@@ -107,7 +123,7 @@ class _QuizExamListDialogState extends State<QuizExamListDialog> {
   }
 
   Future<void> _create() async {
-    final data = await showDialog<QuizExamFormData>(
+    final data = await showDunotsDrawer<QuizExamFormData>(
       context: context,
       builder: (_) => const QuizExamFormDialog(),
     );
@@ -117,7 +133,7 @@ class _QuizExamListDialogState extends State<QuizExamListDialog> {
   }
 
   Future<void> _edit(QuizExam exam) async {
-    final data = await showDialog<QuizExamFormData>(
+    final data = await showDunotsDrawer<QuizExamFormData>(
       context: context,
       builder: (_) => QuizExamFormDialog(initialExam: exam),
     );
@@ -127,23 +143,12 @@ class _QuizExamListDialogState extends State<QuizExamListDialog> {
   }
 
   Future<void> _delete(QuizExam exam) async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showDunotsDrawer<bool>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Excluir prova/vaga?'),
-        content: const Text(
-          'As questões vinculadas serão preservadas como avulsas.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Excluir'),
-          ),
-        ],
+      builder: (_) => const DunotsConfirmDialog(
+        title: 'Excluir prova/vaga?',
+        message: 'As questões vinculadas serão preservadas como avulsas.',
+        confirmLabel: 'Excluir',
       ),
     );
     if (confirmed != true || !mounted) return;
