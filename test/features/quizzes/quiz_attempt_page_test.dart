@@ -7,6 +7,7 @@ import 'package:dunots_mobile/features/questions/questions_preview_page.dart';
 import 'package:dunots_mobile/features/quizzes/data/quiz_attempt_repository.dart';
 import 'package:dunots_mobile/features/quizzes/domain/quiz_attempt.dart';
 import 'package:dunots_mobile/features/quizzes/quiz_attempt_page.dart';
+import 'package:dunots_mobile/shared/widgets/dunots_modal.dart';
 
 void main() {
   testWidgets('seleciona questões e inicia uma tentativa', (tester) async {
@@ -39,7 +40,10 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Selecionar'));
+    await tester.tap(find.byTooltip('Mais ações das questões'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Selecionar questões'));
+    await tester.tap(find.text('Selecionar questões'));
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
       find.byType(Checkbox),
@@ -93,13 +97,13 @@ void main() {
     expect(find.text('Editar simulado'), findsOneWidget);
 
     final fields = find.descendant(
-      of: find.byType(AlertDialog),
+      of: find.byType(DunotsModal),
       matching: find.byType(TextField),
     );
     await tester.enterText(fields.first, 'Simulado revisado');
     await tester.tap(
       find.descendant(
-        of: find.byType(AlertDialog),
+        of: find.byType(DunotsModal),
         matching: find.textContaining('Qual topologia conecta'),
       ),
     );
@@ -165,7 +169,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Topologias').last);
     await tester.pumpAndSettle();
-    final progressDialog = find.byType(AlertDialog);
+    final progressDialog = find.byType(DunotsModal);
     expect(
       find.descendant(
         of: progressDialog,
@@ -226,7 +230,7 @@ void main() {
     expect(find.textContaining('1 pendente(s)'), findsOneWidget);
     expect(
       find.descendant(
-        of: find.byType(AlertDialog),
+        of: find.byType(DunotsModal),
         matching: find.textContaining('Qual topologia conecta'),
       ),
       findsOneWidget,
@@ -239,6 +243,49 @@ void main() {
       (await attemptRepository.getAll()).single.status,
       QuizAttemptStatus.finished,
     );
+  });
+
+  testWidgets('empilha filtros do progresso em tela compacta', (tester) async {
+    final attempt = QuizAttempt(
+      id: 'attempt-progress-compact',
+      title: 'Revisão compacta',
+      questionIds: const ['question-001', 'question-002'],
+      currentIndex: 0,
+      status: QuizAttemptStatus.inProgress,
+      answers: const {'question-001': 0},
+      createdAt: DateTime(2026, 9, 30),
+      updatedAt: DateTime(2026, 9, 30),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(size: Size(360, 800)),
+          child: QuizAttemptPage(
+            attempt: attempt,
+            questionRepository: InMemoryQuestionRepository(),
+            attemptRepository: InMemoryQuizAttemptRepository(
+              attempts: [attempt],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Ver progresso do simulado'));
+    await tester.pumpAndSettle();
+
+    final dialog = find.byType(DunotsModal);
+    expect(find.text('Progresso do simulado'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: dialog,
+        matching: find.byType(DropdownButtonFormField<String>),
+      ),
+      findsNWidgets(2),
+    );
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('reabre simulado finalizado sem alterar respostas', (
