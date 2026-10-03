@@ -48,4 +48,35 @@ void main() {
     expect(find.text('Histórico de revisões'), findsOneWidget);
     expect(find.text('fácil'), findsWidgets);
   });
+
+  testWidgets('organiza ações sem overflow em tela compacta', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 360,
+            height: 800,
+            child: ChallengesPreviewPage(
+              repository: InMemoryChallengeRepository(
+                items: [
+                  Challenge(
+                    id: 'challenge-mobile',
+                    title: 'Desafio mobile',
+                    solution: 'Solução',
+                    createdAt: DateTime(2026, 9, 30),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Buscar desafios'), findsOneWidget);
+    expect(find.text('Novo desafio'), findsOneWidget);
+    expect(find.text('Praticar resultados'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }
