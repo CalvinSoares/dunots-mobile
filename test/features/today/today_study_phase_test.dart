@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:dunots_mobile/core/models/flashcard.dart';
-import 'package:dunots_mobile/features/challenges/data/challenge_repository.dart';
-import 'package:dunots_mobile/features/challenges/domain/challenge.dart';
 import 'package:dunots_mobile/features/flashcards/data/flashcard_repository.dart';
 import 'package:dunots_mobile/features/study/data/study_phase_repository.dart';
 import 'package:dunots_mobile/features/today/today_page.dart';
@@ -18,25 +16,21 @@ void main() {
       back: 'Uma rede lógica.',
       createdAt: now,
     );
-    final challenge = Challenge(
-      id: 'phase-challenge',
-      title: 'Two Sum',
-      createdAt: now,
-    );
-
     await tester.pumpWidget(
       MaterialApp(
         home: TodayPage(
           phaseRepository: phaseRepository,
           flashcardRepository: InMemoryFlashcardRepository(cards: [card]),
-          challengeRepository: InMemoryChallengeRepository(items: [challenge]),
         ),
       ),
     );
     await tester.pumpAndSettle();
 
-    await tester.scrollUntilVisible(find.text('Nova fase'), 300);
-    await tester.tap(find.text('Nova fase'));
+    await tester.scrollUntilVisible(
+      find.byTooltip('Nova fase de estudo'),
+      300,
+    );
+    await tester.tap(find.byTooltip('Nova fase de estudo'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).first, 'Redes');
     await tester.pump();

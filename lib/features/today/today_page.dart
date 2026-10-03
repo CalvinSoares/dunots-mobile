@@ -1,55 +1,48 @@
 import 'package:flutter/material.dart';
 
+import '../../shared/widgets/dunots_modal.dart';
+
 import '../../core/models/flashcard.dart';
 import '../../core/models/flashcard_review_preferences.dart';
 import '../flashcards/data/flashcard_repository.dart';
 import '../flashcards/data/flashcard_review_preferences_repository.dart';
 import '../flashcards/data/flashcard_session_repository.dart';
-import '../challenges/data/challenge_repository.dart';
-import '../challenges/domain/challenge.dart';
-import '../challenges/domain/challenge_performance.dart';
-import '../study/mixed_study_session_page.dart';
 import '../study/data/study_phase_repository.dart';
 import '../study/domain/study_phase.dart';
 import '../study/study_phase_details_page.dart';
 import '../study/study_phase_form_dialog.dart';
-import '../questions/data/question_repository.dart';
 import '../quizzes/data/quiz_attempt_repository.dart';
 import '../quizzes/domain/quiz_attempt.dart';
-import '../quizzes/quiz_attempt_page.dart';
 import '../roadmaps/data/study_track_repository.dart';
 import '../roadmaps/domain/study_track.dart';
 import '../../shared/widgets/study_widgets.dart';
+import '../../app/dunots_theme.dart';
 import '../../core/notifications/local_notification_service.dart';
 
 class TodayPage extends StatefulWidget {
+  final bool showHeader;
   final FlashcardRepository? flashcardRepository;
   final FlashcardSessionRepository? flashcardSessionRepository;
   final FlashcardReviewPreferencesRepository?
   flashcardReviewPreferencesRepository;
   final StudyTrackRepository? trackRepository;
-  final QuestionRepository? questionRepository;
   final QuizAttemptRepository? attemptRepository;
   final VoidCallback? onOpenFlashcards;
-  final VoidCallback? onOpenQuestions;
-  final VoidCallback? onOpenChallenges;
+  final VoidCallback? onOpenTracks;
   final LocalNotificationService? localNotificationService;
-  final ChallengeRepository? challengeRepository;
   final StudyPhaseRepository? phaseRepository;
 
   const TodayPage({
     super.key,
+    this.showHeader = true,
     this.flashcardRepository,
     this.flashcardSessionRepository,
     this.flashcardReviewPreferencesRepository,
     this.trackRepository,
-    this.questionRepository,
     this.attemptRepository,
     this.onOpenFlashcards,
-    this.onOpenQuestions,
-    this.onOpenChallenges,
+    this.onOpenTracks,
     this.localNotificationService,
-    this.challengeRepository,
     this.phaseRepository,
   });
 
@@ -76,18 +69,6 @@ class _TodayPageState extends State<TodayPage> {
         await (widget.flashcardRepository ?? InMemoryFlashcardRepository())
             .getAll();
     final now = DateTime.now();
-    final challengeRepository =
-        widget.challengeRepository ?? InMemoryChallengeRepository();
-    final challenges = await challengeRepository.getAll();
-    final reviewLists = await Future.wait(
-      challenges.map(
-        (challenge) => challengeRepository.getReviewHistory(challenge.id),
-      ),
-    );
-    final challengeReviews = reviewLists.expand((reviews) => reviews).toList();
-    final dueChallenges = challenges
-        .where((challenge) => challenge.isDueAt(now))
-        .length;
     final dueCount = cards.where((card) => card.isDueAt(now)).length;
     final sessions =
         await (widget.flashcardSessionRepository ??
@@ -111,11 +92,17 @@ class _TodayPageState extends State<TodayPage> {
       0,
       (total, session) => total + session.cardCount,
     );
-    await _notificationService.syncDailyFlashcardReminder(
-      preferences: preferences,
-      completedToday: completedToday,
-      dueCount: dueCount,
-    );
+    // Notificações são um recurso auxiliar. Uma falha do plugin (permissão,
+    // timezone ou configuração do Android) não pode impedir o mural de abrir.
+    try {
+      await _notificationService.syncDailyFlashcardReminder(
+        preferences: preferences,
+        completedToday: completedToday,
+        dueCount: dueCount,
+      );
+    } catch (_) {
+      // O lembrete continua opcional; o restante dos dados permanece visível.
+    }
     return _TodayData(
       cards: cards,
       tracks: tracks,
@@ -123,13 +110,6 @@ class _TodayPageState extends State<TodayPage> {
       dueCount: dueCount,
       completedToday: completedToday,
       preferences: preferences,
-      challenges: challenges,
-      dueChallenges: dueChallenges,
-      challengePerformance: ChallengePerformance.from(
-        challenges: challenges,
-        reviews: challengeReviews,
-        now: now,
-      ),
       phases: phases,
     );
   }
@@ -140,22 +120,28 @@ class _TodayPageState extends State<TodayPage> {
       future: _dataFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
-          return const StudyLoadingState(message: 'Carregando seu mural...');
+          return const Center(
+            child: StudyLoadingState(message: 'Carregando seu mural...'),
+          );
         }
         if (snapshot.hasError) {
-          return StudyErrorState(
-            message: 'Não foi possível carregar o mural.',
-            onRetry: () => setState(() {
-              _dataFuture = _loadData();
-            }),
+          return Center(
+            child: StudyErrorState(
+              message: 'Não foi possível carregar o mural.',
+              onRetry: () => setState(() {
+                _dataFuture = _loadData();
+              }),
+            ),
           );
         }
         final data = snapshot.data;
         if (data == null) {
-          return const StudyEmptyState(
-            title: 'Nenhum dado disponível.',
-            detail: 'Tente novamente para atualizar seu mural.',
-            icon: Icons.dashboard_outlined,
+          return const Center(
+            child: StudyEmptyState(
+              title: 'Nenhum dado disponível.',
+              detail: 'Tente novamente para atualizar seu mural.',
+              icon: Icons.dashboard_outlined,
+            ),
           );
         }
         return _buildContent(context, data);
@@ -164,433 +150,133 @@ class _TodayPageState extends State<TodayPage> {
   }
 
   Widget _buildContent(BuildContext context, _TodayData data) {
-    final firstAttempt = data.inProgress.firstOrNull;
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final isWide = constraints.maxWidth >= 700;
-        return SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(20, 22, 20, 28),
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 980),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const DunotsBrand(),
-                  const SizedBox(height: 28),
-                  Text(
-                    'seu caderno de estudos',
-                    style: Theme.of(context).textTheme.titleMedium
-                        ?.copyWith(color: const Color(0xFFB6B7AD)),
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(20, 22, 20, 36),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 760),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (widget.showHeader) ...[
+                StudyScreenHeader(
+                  icon: Icons.today_outlined,
+                  title: 'Hoje',
+                  subtitle: 'Sua próxima sessão e o progresso do dia.',
+                ),
+                const SizedBox(height: 20),
+              ],
+              _buildStudyFocus(context, data),
+              const SizedBox(height: 14),
+              _buildTodaySummary(context, data),
+              const SizedBox(height: 26),
+              _buildSectionHeader(
+                context,
+                title: 'Fases de estudo',
+                action: Tooltip(
+                  message: 'Nova fase de estudo',
+                  child: TextButton.icon(
+                    onPressed: () => _createPhase(data),
+                    icon: const Icon(Icons.add, size: 18),
+                    label: const Text('Nova'),
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Vamos avançar um pouco hoje?',
-                    style: Theme.of(context).textTheme.headlineSmall
-                        ?.copyWith(fontWeight: FontWeight.w700),
-                  ),
-                  const SizedBox(height: 22),
-                  ReviewCard(
-                    count: data.cards.length,
-                    onPressed: widget.onOpenFlashcards,
-                  ),
-                  if (data.preferences.reminderEnabled &&
-                      data.completedToday < data.preferences.dailyGoal) ...[
-                    const SizedBox(height: 14),
-                    _buildReminder(context, data),
-                  ],
-                  const SizedBox(height: 18),
-                  if (isWide)
-                    Row(
-                      children: [
-                        Expanded(
-                          child: MetricCard(
-                            label: 'flashcards',
-                            value: '${data.cards.length}',
-                            icon: Icons.style_outlined,
-                            color: const Color(0xFF78B8FF),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: MetricCard(
-                            label: 'desafios vencidos',
-                            value: '${data.dueChallenges}',
-                            icon: Icons.code_outlined,
-                            color: const Color(0xFF7FD6B2),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: MetricCard(
-                            label: 'trilhas ativas',
-                            value: '${data.tracks.length}',
-                            icon: Icons.route_outlined,
-                            color: const Color(0xFFB79BFF),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: MetricCard(
-                            label: 'simulados em andamento',
-                            value: '${data.inProgress.length}',
-                            icon: Icons.assignment_outlined,
-                            color: const Color(0xFFFFC857),
-                          ),
-                        ),
-                      ],
-                    )
-                  else
-                    Column(
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: MetricCard(
-                                label: 'flashcards',
-                                value: '${data.cards.length}',
-                                icon: Icons.style_outlined,
-                                color: const Color(0xFF78B8FF),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: MetricCard(
-                                label: 'trilhas ativas',
-                                value: '${data.tracks.length}',
-                                icon: Icons.route_outlined,
-                                color: const Color(0xFFB79BFF),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        Expanded(
-                          child: MetricCard(
-                            label: 'simulados em andamento',
-                            value: '${data.inProgress.length}',
-                            icon: Icons.assignment_outlined,
-                            color: const Color(0xFFFFC857),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: MetricCard(
-                            label: 'desafios vencidos',
-                            value: '${data.dueChallenges}',
-                            icon: Icons.code_outlined,
-                            color: const Color(0xFF7FD6B2),
-                          ),
-                        ),
-                      ],
-                    ),
-                  const SizedBox(height: 26),
-                  Text(
-                    'acesso rápido',
-                    style: Theme.of(context).textTheme.titleMedium
-                        ?.copyWith(fontWeight: FontWeight.w700),
-                  ),
-                  const SizedBox(height: 12),
-                  QuickAction(
-                    icon: Icons.auto_awesome_motion_outlined,
-                    title: 'Iniciar estudo misto',
-                    subtitle:
-                        '${data.cards.length} flashcards · ${data.challenges.length} desafios disponíveis',
-                    color: const Color(0xFFB79BFF),
-                    onTap: () => _openMixedStudy(data),
-                  ),
-                  const SizedBox(height: 10),
-                  QuickAction(
-                    icon: Icons.style_outlined,
-                    title: 'Abrir flashcards',
-                    subtitle: '${data.cards.length} cartões cadastrados',
-                    color: const Color(0xFFFF7168),
-                    onTap: widget.onOpenFlashcards,
-                  ),
-                  const SizedBox(height: 10),
-                  QuickAction(
-                    icon: Icons.code_outlined,
-                    title: 'Abrir desafios',
-                    subtitle: data.dueChallenges == 0
-                        ? '${data.challenges.length} desafios cadastrados'
-                        : '${data.dueChallenges} desafio(s) aguardam revisão',
-                    color: const Color(0xFF7FD6B2),
-                    onTap: widget.onOpenChallenges,
-                  ),
-                  const SizedBox(height: 10),
-                  _buildChallengePerformance(context, data),
-                  const SizedBox(height: 10),
-                  QuickAction(
-                    icon: Icons.assignment_outlined,
-                    title: firstAttempt == null
-                        ? 'Montar simulado'
-                        : 'Continuar simulado',
-                    subtitle: firstAttempt == null
-                        ? 'Escolha questões para começar'
-                        : firstAttempt.title,
-                    color: const Color(0xFFFFC857),
-                    onTap: firstAttempt == null
-                        ? widget.onOpenQuestions
-                        : () => _openAttempt(firstAttempt),
-                  ),
-                  const SizedBox(height: 26),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'fases de estudo',
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(fontWeight: FontWeight.w700),
-                      ),
-                      TextButton.icon(
-                        onPressed: () => _createPhase(data),
-                        icon: const Icon(Icons.add),
-                        label: const Text('Nova fase'),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  if (data.phases.isEmpty)
-                    const ExampleListTile(
-                      title: 'Nenhuma fase criada',
-                      detail: 'Agrupe flashcards e desafios para estudar por objetivo.',
-                    )
-                  else
-                    ...data.phases.asMap().entries.map(
-                      (entry) => _buildPhaseCard(
-                        context,
-                        data,
-                        entry.value,
-                        entry.key,
-                      ),
-                    ),
-                  const SizedBox(height: 26),
-                  Text(
-                    'trilhas em andamento',
-                    style: Theme.of(context).textTheme.titleMedium
-                        ?.copyWith(fontWeight: FontWeight.w700),
-                  ),
-                  const SizedBox(height: 12),
-                  if (data.tracks.isEmpty)
-                    const ExampleListTile(
-                      title: 'Nenhuma trilha criada',
-                      detail: 'Crie uma trilha para organizar seus estudos.',
-                    )
-                  else
-                    ...data.tracks
-                        .take(3)
-                        .map(
-                          (track) => Padding(
-                            padding: const EdgeInsets.only(bottom: 10),
-                            child: ProgressListTile(track: track),
-                          ),
-                        ),
-                ],
+                ),
               ),
-            ),
+              const SizedBox(height: 10),
+              if (data.phases.isEmpty)
+                ExampleListTile(
+                  title: 'Nenhuma fase criada',
+                  detail: 'Agrupe flashcards para estudar por objetivo.',
+                  onTap: () => _createPhase(data),
+                )
+              else
+                ...data.phases.asMap().entries.map(
+                  (entry) =>
+                      _buildPhaseCard(context, data, entry.value, entry.key),
+                ),
+              const SizedBox(height: 26),
+              _buildSectionHeader(context, title: 'Trilhas em andamento'),
+              const SizedBox(height: 10),
+              if (data.tracks.isEmpty)
+                ExampleListTile(
+                  title: 'Nenhuma trilha criada',
+                  detail: 'Crie uma trilha para organizar seus estudos.',
+                  onTap: widget.onOpenTracks,
+                )
+              else
+                ...data.tracks
+                    .take(3)
+                    .map(
+                      (track) => Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: ProgressListTile(track: track),
+                      ),
+                    ),
+            ],
           ),
-        );
-      },
-    );
-  }
-
-  Widget _buildChallengePerformance(BuildContext context, _TodayData data) {
-    final performance = data.challengePerformance;
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.insights_outlined),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Desempenho dos desafios',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                ),
-                Text(
-                  performance.totalReviews == 0
-                      ? 'sem histórico'
-                      : '${(performance.successRate * 100).round()}% aproveitamento',
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.primary,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                Chip(label: Text('${performance.totalReviews} revisões')),
-                Chip(label: Text('${performance.dueChallenges} pendentes')),
-                Chip(
-                  label: Text('novamente ${performance.ratingCount('again')}'),
-                ),
-                Chip(label: Text('difícil ${performance.ratingCount('hard')}')),
-                Chip(label: Text('bom ${performance.ratingCount('medium')}')),
-                Chip(label: Text('fácil ${performance.ratingCount('easy')}')),
-              ],
-            ),
-          ],
         ),
       ),
     );
   }
 
-  Widget _buildReminder(BuildContext context, _TodayData data) {
-    final remaining = data.preferences.dailyGoal - data.completedToday;
-    final schedule = _formatTime(
-      data.preferences.reminderHour,
-      data.preferences.reminderMinute,
+  Widget _buildStudyFocus(BuildContext context, _TodayData data) {
+    final hasReviews = data.dueCount > 0;
+    return StudyFocusCard(
+      eyebrow: hasReviews ? 'Próxima ação' : 'Tudo em dia',
+      eyebrowIcon: hasReviews
+          ? Icons.play_circle_outline
+          : Icons.check_circle_outline,
+      title: hasReviews
+          ? 'Revisar ${data.dueCount} flashcards'
+          : 'Sua revisão está em dia',
+      detail: hasReviews
+          ? '${data.completedToday} revisados hoje · meta ${data.preferences.dailyGoal}.'
+          : 'Abra seus flashcards para continuar avançando no seu ritmo.',
+      actionIcon: Icons.play_arrow_rounded,
+      actionLabel: hasReviews ? 'Estudar agora' : 'Abrir flashcards',
+      onPressed: widget.onOpenFlashcards,
     );
-    final detail = data.dueCount > 0
-        ? '${data.dueCount} card(s) aguardam revisão. Faltam $remaining para a meta. '
-              'Lembrete configurado para $schedule.'
-        : 'Faltam $remaining card(s) para concluir sua meta. '
-              'Lembrete configurado para $schedule.';
-    return Card(
-      color: Theme.of(context).colorScheme.error.withValues(alpha: 0.12),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(
-              Icons.notifications_active_outlined,
-              color: Theme.of(context).colorScheme.error,
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Lembrete de revisão',
-                    style: TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(detail),
-                  const SizedBox(height: 8),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        OutlinedButton.icon(
-                          onPressed: widget.onOpenFlashcards,
-                          icon: const Icon(Icons.play_arrow_rounded),
-                          label: const Text('Revisar agora'),
-                        ),
-                        TextButton.icon(
-                          onPressed: () => _configureReminder(data.preferences),
-                          icon: const Icon(Icons.schedule_outlined),
-                          label: const Text('Configurar horário'),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
+  }
+
+  Widget _buildTodaySummary(BuildContext context, _TodayData data) {
+    return StudyMetricStrip(
+      metrics: [
+        StudyMetric(
+          value: '${data.dueCount}',
+          label: 'pendentes',
+          color: DunotsColors.amber,
         ),
-      ),
-    );
-  }
-
-  Future<void> _configureReminder(FlashcardReviewPreferences current) async {
-    final updated = await showDialog<FlashcardReviewPreferences>(
-      context: context,
-      builder: (_) => _ReminderSettingsDialog(preferences: current),
-    );
-    if (updated == null || !mounted) return;
-    final repository = widget.flashcardReviewPreferencesRepository;
-    if (repository == null) return;
-    await repository.save(updated);
-    if (updated.reminderEnabled) {
-      await _notificationService.requestPermission();
-    }
-    if (mounted) {
-      setState(() {
-        _dataFuture = _loadData();
-      });
-    }
-  }
-
-  String _formatTime(int hour, int minute) {
-    return '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
-  }
-
-  Future<void> _openAttempt(QuizAttempt attempt) async {
-    final questionRepository = widget.questionRepository;
-    final attemptRepository = widget.attemptRepository;
-    if (questionRepository == null || attemptRepository == null || !mounted) {
-      widget.onOpenQuestions?.call();
-      return;
-    }
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => QuizAttemptPage(
-          attempt: attempt,
-          questionRepository: questionRepository,
-          attemptRepository: attemptRepository,
+        StudyMetric(
+          value: '${data.completedToday}',
+          label: 'concluídos hoje',
+          color: DunotsColors.mint,
         ),
-      ),
+        StudyMetric(
+          value: '${data.tracks.length}',
+          label: 'trilhas',
+          color: DunotsColors.purple,
+        ),
+      ],
     );
-    if (mounted) {
-      setState(() {
-        _dataFuture = _loadData();
-      });
-    }
   }
 
-  Future<void> _openMixedStudy(_TodayData data) async {
-    final now = DateTime.now();
-    final dueCards = data.cards.where((card) => card.isDueAt(now)).toList();
-    final dueChallenges = data.challenges
-        .where((challenge) => challenge.isDueAt(now))
-        .toList();
-    final cards = dueCards.isEmpty ? data.cards : dueCards;
-    final challenges = dueChallenges.isEmpty ? data.challenges : dueChallenges;
-    if (cards.isEmpty && challenges.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Nenhum item disponível para estudar.')),
-      );
-      return;
-    }
-    final flashcardRepository =
-        widget.flashcardRepository ??
-        InMemoryFlashcardRepository(cards: data.cards);
-    final challengeRepository =
-        widget.challengeRepository ??
-        InMemoryChallengeRepository(items: data.challenges);
-    final sessionRepository =
-        widget.flashcardSessionRepository ??
-        InMemoryFlashcardSessionRepository();
-    final reviewed = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(
-        builder: (_) => MixedStudySessionPage(
-          cards: cards,
-          challenges: challenges,
-          flashcardRepository: flashcardRepository,
-          challengeRepository: challengeRepository,
-          sessionRepository: sessionRepository,
+  Widget _buildSectionHeader(
+    BuildContext context, {
+    required String title,
+    Widget? action,
+  }) {
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            title,
+            style: Theme.of(context).textTheme.titleMedium
+                ?.copyWith(fontWeight: FontWeight.w700),
+          ),
         ),
-      ),
+        ?action,
+      ],
     );
-    if (reviewed == true && mounted) {
-      setState(() {
-        _dataFuture = _loadData();
-      });
-    }
   }
 
   Widget _buildPhaseCard(
@@ -599,50 +285,91 @@ class _TodayPageState extends State<TodayPage> {
     StudyPhase phase,
     int index,
   ) {
-    final progress = phase.progress(
-      flashcards: data.cards,
-      challenges: data.challenges,
-    );
-    final completed = phase.completedItems(
-      flashcards: data.cards,
-      challenges: data.challenges,
-    );
-    return Card(
-      margin: const EdgeInsets.only(bottom: 10),
-      child: ListTile(
-        onTap: () => _openPhase(phase),
-        leading: const Icon(Icons.layers_outlined),
-        title: Text(phase.title),
-        subtitle: Text(
-          '$completed/${phase.totalItems} concluídos · ${phase.flashcardIds.length} flashcards · ${phase.challengeIds.length} desafios',
-        ),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            IconButton(
-              tooltip: 'Mover fase para cima',
-              onPressed: index == 0 ? null : () => _movePhase(data, index, -1),
-              icon: const Icon(Icons.arrow_upward),
+    final progress = phase.progress(flashcards: data.cards);
+    final completed = phase.completedItems(flashcards: data.cards);
+    final percent = (progress * 100).round();
+    return Semantics(
+      button: true,
+      label:
+          'Fase ${phase.title}. $completed de ${phase.totalItems} concluídos. $percent por cento.',
+      hint: 'Toque para abrir a fase.',
+      child: Card(
+        margin: const EdgeInsets.only(bottom: 10),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => _openPhase(phase),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
+            child: Row(
+              children: [
+                Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: DunotsColors.mint.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(11),
+                  ),
+                  child: const Icon(
+                    Icons.layers_outlined,
+                    color: DunotsColors.mint,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        phase.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        '$completed/${phase.totalItems} concluídos · ${phase.flashcardIds.length} cards',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: DunotsColors.muted,
+                          fontSize: 12,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(99),
+                        child: LinearProgressIndicator(
+                          value: progress,
+                          minHeight: 4,
+                          color: DunotsColors.mint,
+                          backgroundColor: DunotsColors.border,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                StudyContextMenu<String>(
+                  tooltip: 'Ações da fase',
+                  onSelected: (value) {
+                    if (value == 'up') _movePhase(data, index, -1);
+                    if (value == 'down') _movePhase(data, index, 1);
+                  },
+                  itemBuilder: (context) => [
+                    if (index > 0)
+                      const PopupMenuItem(
+                        value: 'up',
+                        child: Text('Mover para cima'),
+                      ),
+                    if (index < data.phases.length - 1)
+                      const PopupMenuItem(
+                        value: 'down',
+                        child: Text('Mover para baixo'),
+                      ),
+                  ],
+                ),
+              ],
             ),
-            IconButton(
-              tooltip: 'Mover fase para baixo',
-              onPressed: index == data.phases.length - 1
-                  ? null
-                  : () => _movePhase(data, index, 1),
-              icon: const Icon(Icons.arrow_downward),
-            ),
-            SizedBox(
-              width: 70,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text('${(progress * 100).round()}%'),
-                  const SizedBox(height: 4),
-                  LinearProgressIndicator(value: progress),
-                ],
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -663,12 +390,9 @@ class _TodayPageState extends State<TodayPage> {
   }
 
   Future<void> _createPhase(_TodayData data) async {
-    final phase = await showDialog<StudyPhase>(
+    final phase = await showDunotsDrawer<StudyPhase>(
       context: context,
-      builder: (_) => StudyPhaseFormDialog(
-        flashcards: data.cards,
-        challenges: data.challenges,
-      ),
+      builder: (_) => StudyPhaseFormDialog(flashcards: data.cards),
     );
     if (phase == null) return;
     await _phaseRepository.create(
@@ -684,15 +408,12 @@ class _TodayPageState extends State<TodayPage> {
   Future<void> _openPhase(StudyPhase phase) async {
     final flashcardRepository =
         widget.flashcardRepository ?? InMemoryFlashcardRepository();
-    final challengeRepository =
-        widget.challengeRepository ?? InMemoryChallengeRepository();
     await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => StudyPhaseDetailsPage(
           phase: phase,
           phaseRepository: _phaseRepository,
           flashcardRepository: flashcardRepository,
-          challengeRepository: challengeRepository,
         ),
       ),
     );
@@ -711,9 +432,6 @@ class _TodayData {
   final int dueCount;
   final int completedToday;
   final FlashcardReviewPreferences preferences;
-  final List<Challenge> challenges;
-  final int dueChallenges;
-  final ChallengePerformance challengePerformance;
   final List<StudyPhase> phases;
 
   const _TodayData({
@@ -723,81 +441,6 @@ class _TodayData {
     required this.dueCount,
     required this.completedToday,
     required this.preferences,
-    required this.challenges,
-    required this.dueChallenges,
-    required this.challengePerformance,
     required this.phases,
   });
-}
-
-class _ReminderSettingsDialog extends StatefulWidget {
-  final FlashcardReviewPreferences preferences;
-
-  const _ReminderSettingsDialog({required this.preferences});
-
-  @override
-  State<_ReminderSettingsDialog> createState() =>
-      _ReminderSettingsDialogState();
-}
-
-class _ReminderSettingsDialogState extends State<_ReminderSettingsDialog> {
-  late bool _enabled;
-  late TimeOfDay _time;
-
-  @override
-  void initState() {
-    super.initState();
-    _enabled = widget.preferences.reminderEnabled;
-    _time = TimeOfDay(
-      hour: widget.preferences.reminderHour,
-      minute: widget.preferences.reminderMinute,
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Configurar lembrete'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Ativar lembrete'),
-            value: _enabled,
-            onChanged: (value) => setState(() => _enabled = value),
-          ),
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.schedule_outlined),
-            title: const Text('Horário'),
-            subtitle: Text(_time.format(context)),
-            enabled: _enabled,
-            onTap: _enabled ? _pickTime : null,
-          ),
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancelar'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.of(context).pop(
-            widget.preferences.copyWith(
-              reminderEnabled: _enabled,
-              reminderHour: _time.hour,
-              reminderMinute: _time.minute,
-            ),
-          ),
-          child: const Text('Salvar'),
-        ),
-      ],
-    );
-  }
-
-  Future<void> _pickTime() async {
-    final selected = await showTimePicker(context: context, initialTime: _time);
-    if (selected != null && mounted) setState(() => _time = selected);
-  }
 }
